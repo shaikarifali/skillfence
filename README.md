@@ -1,4 +1,4 @@
-# SkillFence
+<h1><img src="SkillFence.png" alt="SkillFence logo" width="48" valign="middle"> SkillFence</h1>
 
 **Runtime behavioral security for Agentic Skills.**
 
