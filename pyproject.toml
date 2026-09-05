@@ -1,0 +1,22 @@
+[project]
+name = "skillfence"
+version = "0.1.0"
+description = "DVAS-Runtime / SkillFence — runtime behavioral security for Agentic Skills"
+requires-python = ">=3.10"
+dependencies = [
+    "pydantic>=2.6",
+    "typer>=0.12",
+    "rich>=13.7",
+    "pyyaml>=6.0",
+]
+
+[project.scripts]
+skillfence = "skillfence.cli.main:app"
+dvas = "skillfence.cli.main:app"
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["skillfence*"]

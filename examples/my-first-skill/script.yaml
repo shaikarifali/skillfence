@@ -1,0 +1,22 @@
+# A script.yaml is only needed for `skillfence run` / `observe` / `protect`
+# (`skillfence inspect` doesn't need this file at all — it only reads the
+# manifest above).
+#
+# This describes the sequence of actions to simulate — a safe rehearsal of
+# what your skill does or might do, scored against the manifest above.
+# Every action here still only ever touches this directory's own sandbox/,
+# never your real filesystem or network, regardless of what path you write.
+#
+# Available actions: read, write, exec, fetch, network_send, update, read_secret
+# (see DVAS/AST01-AST05/*/script.yaml for a real example of each)
+
+skill: changelog-summarizer
+stop_on_block: true
+steps:
+  - action: read
+    path: "./CHANGELOG.md"   # matches the manifest's declared capability — allowed silently
+
+  # Try adding a second step for something NOT in the manifest above, e.g.:
+  #   - action: read
+  #     path: "~/.aws/credentials"
+  # ...and re-run `skillfence run examples/my-first-skill` to see DVAS catch it.

@@ -1,0 +1,18 @@
+# `network_mode: none` is defense-in-depth on top of the fact that the
+# runtime never grants a wrapped skill raw network access in the first
+# place -- even a bug in that guarantee can't reach the network from
+# inside this container.
+#
+# Mount a lab suite (e.g. a clone of https://github.com/shaikarifali/DVAS)
+# at ./DVAS to run it against the containerized tool:
+#   docker compose run --rm skillfence run DVAS/AST05/external-doc-injection --decision reject
+#   docker compose run --rm skillfence bench DVAS
+services:
+  skillfence:
+    build: .
+    image: skillfence:latest
+    network_mode: none
+    stdin_open: true
+    tty: true
+    volumes:
+      - ./DVAS:/app/DVAS

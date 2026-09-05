@@ -1,0 +1,18 @@
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# per-run output — reproducible from labs/, not source
+.runs/
+.skillfence_demo/
+labs/**/.runs/
+labs/**/sandbox/_exfil_capture.txt
+
+# org-wide policy grants (Decision Memory) — runtime state, not source
+.skillfence/
