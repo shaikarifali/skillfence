@@ -102,10 +102,23 @@ class RuntimeGateway:
         self.root_event_id: str | None = None
         self.invoke_event_id: str | None = None
 
-        # AST02: the manifest in force immediately before the most
-        # recent skill.update, kept so newly-declared-since-update
-        # capabilities can be told apart from ones that were always declared.
-        self._pre_update_manifest: CapabilityManifest | None = None
+        # AST02: every manifest this skill has been loaded with, oldest
+        # first (appended on each skill.update, so index 0 is the true
+        # original baseline). Comparing a newly-observed capability against
+        # `_manifest_history[0]` specifically -- not "any manifest seen
+        # along the way" -- matters: a single-prior-snapshot check (or a
+        # naive "declared by some earlier manifest" union check) both lose
+        # the signal the moment a *second*, unrelated update happens after
+        # the capability was smuggled in. Concrete case: v1 has no SSH key
+        # access; update A -> v2 adds it; nothing touches it yet; update B
+        # -> v3 changes something unrelated, SSH access untouched. A read
+        # of the SSH key now compares against v2 (single-snapshot) or
+        # against {v1, v2} (union) -- both already contain the grant from
+        # v2, so neither flags it, even though it was never in the
+        # skill's *original* declaration. Only comparing against the true
+        # baseline (v1) catches this regardless of how many updates
+        # happened in between.
+        self._manifest_history: list[CapabilityManifest] = []
         self._post_update = False
 
     # -- lifecycle --------------------------------------------------------
@@ -157,9 +170,11 @@ class RuntimeGateway:
         self, to_version: str, new_manifest_path: Path, *, parent_event: str | None = None
     ) -> None:
         """Skill update/dependency-change event (AST02). Swaps the active
-        manifest and remembers the previous one, so subsequent capability
-        checks can distinguish "always declared" from "newly declared by
-        this (possibly compromised) update."
+        manifest and appends the outgoing one to `_manifest_history`, so
+        subsequent capability checks can distinguish "declared in the
+        skill's original manifest" from "newly declared by some update
+        along the way" -- across any number of updates, not just the most
+        recent one.
         """
         parent = parent_event or self.invoke_event_id
         new_manifest = CapabilityManifest.load(new_manifest_path, workspace=self.sandbox.root)
@@ -171,7 +186,7 @@ class RuntimeGateway:
             parent_event=parent,
             details={"from_version": self.manifest.version, "to_version": to_version},
         )
-        self._pre_update_manifest = self.manifest
+        self._manifest_history.append(self.manifest)
         self.manifest = new_manifest
         self.policy = PolicyEngine(new_manifest)
         self._post_update = True
@@ -607,13 +622,19 @@ class RuntimeGateway:
         self.correlation.observe(event)
 
         # AST02: was this capability declared only as of the *current*
-        # (post-update) manifest, i.e. absent even from the manifest in
-        # force before the most recent skill.update?
+        # manifest, i.e. absent from the skill's *original* manifest --
+        # `_manifest_history[0]`, not just the one immediately before the
+        # most recent update. A capability smuggled in by an early update
+        # and never acted on before a later, unrelated update must still
+        # be caught; checking only the immediately-prior manifest (or a
+        # union of every manifest seen along the way) loses that signal
+        # the moment a second update happens, since the smuggled-in grant
+        # is already present in every manifest after the one that added it.
         behavior_changed_after_update = (
             self._post_update
-            and self._pre_update_manifest is not None
+            and bool(self._manifest_history)
             and policy_result.declared
-            and not self._allowed_by_manifest(self._pre_update_manifest, event_type, resource)
+            and not self._allowed_by_manifest(self._manifest_history[0], event_type, resource)
         )
         if behavior_changed_after_update:
             ast = sorted(set(ast) | {"AST02"})

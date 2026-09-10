@@ -374,6 +374,52 @@ def policy_revoke(
         raise typer.Exit(1)
 
 
+@policy_app.command(
+    "compile-apparmor",
+    epilog="Examples:\n"
+    "  skillfence policy compile-apparmor skill/manifest.yaml --binary /usr/bin/python3 > skill.profile\n"
+    "  skillfence policy compile-apparmor skill/manifest.yaml --binary /usr/bin/python3 "
+    "--workspace /opt/agent-workspace --home /home/agent -o skill.profile\n"
+    "  Then, as root: apparmor_parser -r skill.profile && aa-exec -p <skill-name> -- <command>\n",
+)
+def policy_compile_apparmor(
+    manifest_path: Path = typer.Argument(..., help="A capability manifest (skill/manifest.yaml schema)"),
+    binary: str = typer.Option(..., "--binary", help="The real interpreter/executable that will run the agent, e.g. /usr/bin/python3"),
+    profile_name: Optional[str] = typer.Option(None, "--name", help="AppArmor profile name (defaults to the manifest's skill name)"),
+    workspace: Optional[str] = typer.Option(
+        None, "--workspace", help="Absolute path to resolve ${workspace}-free relative filesystem patterns against"
+    ),
+    home: Optional[str] = typer.Option(None, "--home", help="Absolute path to resolve ~-prefixed filesystem patterns against"),
+    output: Optional[Path] = typer.Option(None, "--output", "-o", help="Write the profile here instead of stdout"),
+):
+    """Compiles a capability manifest into a real, loadable AppArmor
+    profile — SkillFence as a policy compiler, not an enforcer. Layer A
+    (every other command in this tool) blocks at the agent-tool boundary,
+    in-process; this generates OS-level policy a real AppArmor kernel
+    module enforces natively, closing the gap `telemetry correlate`
+    leaves as retroactive-only. SkillFence never loads or enforces the
+    profile itself — that stays the operator's job (`apparmor_parser -r`,
+    then `aa-exec -p <name> -- <command>`), the same "wrap mature
+    infrastructure" principle the auditd telemetry integration uses.
+    Some manifest fields have no AppArmor equivalent (`network.domains`,
+    `secrets.access`) and are disclosed as comments in the generated
+    profile, not silently dropped. Not verified against a live
+    `apparmor_parser` — validate with `apparmor_parser -Q -r` before
+    trusting one in production."""
+    from skillfence.policy.apparmor_compile import compile_to_apparmor
+    from skillfence.policy.manifest import CapabilityManifest
+
+    manifest = CapabilityManifest.load(manifest_path, workspace=Path(workspace) if workspace else None)
+    profile = compile_to_apparmor(
+        manifest, binary=binary, profile_name=profile_name, workspace=workspace, home=home
+    )
+    if output:
+        output.write_text(profile, encoding="utf-8")
+        console.print(f"[green]Wrote {output}[/green]")
+    else:
+        print(profile)
+
+
 @app.command(
     epilog="Examples:\n  skillfence report DVAS/AST05/external-doc-injection\n"
     "  skillfence report DVAS/AST05/external-doc-injection --json\n"

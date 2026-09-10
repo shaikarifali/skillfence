@@ -225,16 +225,20 @@ skillfence dashboard .skillfence/mcp                   # an MCP proxy audit dir
 skillfence dashboard . --port 9000 --no-browser
 ```
 A local, read-only page over the same evidence every command above reads —
-no new storage, no database. Session list (skill, highest severity, finding
-count) on the left; select one for its findings table (severity, AST tags,
-why-flagged, Capability Drift Score bar), its provenance chain rendered as
-a collapsible tree (built client-side from `parent_event` links — no
-graph library, no external request of any kind), and its raw event log.
-Re-scans the filesystem on every browser refresh (with an unchanged-file
-cache so an idle poll costs near nothing) and auto-refreshes every few
-seconds, so leaving it open during a live `run`/`mcp-proxy` session shows
-new events land in real time. Bound to `127.0.0.1` only — never reachable
-from another machine.
+no new storage format, findings/events stay exactly where `run`/
+`mcp-proxy` already write them. Session list (skill, highest severity,
+finding count) on the left; select one for its findings table (severity,
+AST tags, why-flagged, Capability Drift Score bar), its provenance chain
+rendered as a collapsible tree (built client-side from `parent_event`
+links — no graph library, no external request of any kind), and its raw
+event log. Backed by a small persistent index (stdlib `sqlite3`,
+`.skillfence/dashboard_index.sqlite3` in the scanned root) that caches
+both file contents and the directory walk, so an idle auto-refresh (every
+few seconds) costs close to nothing and a dashboard restart doesn't start
+cold — while still picking up a live `run`/`mcp-proxy` session's new
+events as they land (a growing file's cache entry invalidates itself; a
+brand-new session appears once the walk cache's short TTL expires).
+Bound to `127.0.0.1` only — never reachable from another machine.
 
 ### Sign and verify evidence (tamper-evident audit trail)
 
@@ -315,6 +319,52 @@ lower-confidence class of evidence — `TelemetryFinding`, not `Finding` —
 never fed through `RiskEngine`/`HumanGate` as if it carried the same
 certainty as the rest of the engine. Linux-only, x86_64 syscall numbers
 only, needs root to configure the audit rules; see Limitations.
+
+### Policy compiler — real, kernel-enforced confinement from the same manifest
+
+`telemetry correlate` is retroactive: it tells you *after the fact* that
+an agent acted outside every wrapped tool call. `skillfence policy
+compile-apparmor` closes that gap for real, by generating a genuine,
+loadable [AppArmor](https://apparmor.net/) profile from the exact same
+capability manifest the runtime already checks — SkillFence becomes a
+*policy compiler*, and a real kernel LSM does the actual blocking,
+natively, in real time:
+
+```bash
+skillfence policy compile-apparmor skill/manifest.yaml --binary /usr/bin/python3 \
+  --workspace /opt/agent-workspace --home /home/agent -o skill.profile
+
+# as root:
+apparmor_parser -r skill.profile
+aa-exec -p example-mcp-server -- python3 agent.py
+```
+
+AppArmor over seccomp-bpf on purpose: seccomp filters raw syscall
+arguments and can block a syscall *class* entirely, but can't dereference
+a path-string argument, so it can't express "reads under
+`${workspace}/logs/**` only" — most of what a manifest actually declares.
+AppArmor is a path-aware MAC system built around exactly that rule shape
+(`/path/** r,`, `/usr/bin/curl ix,`), so `filesystem.read/write`,
+`process.execute`, and `network.enabled` translate directly. Same "wrap
+mature infrastructure, don't reimplement it" principle as the auditd
+integration: SkillFence never loads or enforces the profile itself —
+that's `apparmor_parser`/`aa-exec`, the operator's job.
+
+Two manifest fields have no AppArmor equivalent and are disclosed as
+comments in the generated profile rather than silently dropped:
+`network.domains` (AppArmor's network mediation is address-family/socket-
+type only, not destination-based — an enabled-network profile permits
+broadly, never scoped to the declared domains) and `secrets.access` (a
+bare boolean naming no path or syscall). A `filesystem` pattern that's
+still relative or `~`-prefixed by compile time (AppArmor has no cwd or
+shell to resolve it against) is skipped with an explicit `# SKIPPED`
+comment, never emitted as a rule that would silently match nothing —
+pass `--workspace`/`--home` to resolve those. Debian/Ubuntu-only in
+practice (AppArmor isn't RHEL/Fedora's default LSM — that's SELinux, a
+different effort); needs root to actually load a profile; not verified
+against a live `apparmor_parser` (no root in the sandbox this was built
+in to install `apparmor-utils`) — validate with `apparmor_parser -Q -r`
+before trusting one in production.
 
 ### Smoke test (no lab required)
 
@@ -778,29 +828,40 @@ the 15/15 · 0/2 numbers above are enforced, not just claimed.
   return-value-override callback for ADK) — see the adapter sections
   above.
 - **Layer A interception is the primary control; `telemetry correlate` is
-  a secondary, heuristic one, not a peer.** SkillFence wraps tool calls at
-  the agent-tool boundary — that's where the deterministic, real-time
-  block-before-it-happens guarantee lives. `skillfence telemetry
-  correlate` (see below) can retroactively surface OS-level activity that
-  bypassed every wrapped tool call entirely, by attributing an existing
-  `auditd` feed back to a session, but it's after-the-fact, name/path-
-  suffix matching (not exact), Linux-only, and needs auditd rules already
-  configured with root. It's a lead worth review, not a block. Its parser
-  is built and tested against the documented, decade-stable auditd log
+  a secondary, heuristic one, not a peer — `policy compile-apparmor`
+  closes that gap for real, but is opt-in and Linux-only.** SkillFence
+  wraps tool calls at the agent-tool boundary — that's where the
+  deterministic, real-time block-before-it-happens guarantee lives.
+  `skillfence telemetry correlate` can retroactively surface OS-level
+  activity that bypassed every wrapped tool call entirely, by attributing
+  an existing `auditd` feed back to a session, but it's after-the-fact,
+  name/path-suffix matching (not exact), and needs auditd rules already
+  configured with root — a lead worth review, not a block. Its parser is
+  built and tested against the documented, decade-stable auditd log
   format, not against a live feed — the sandbox this was written in has
   no kernel audit subsystem available (no systemd, WSL2) to verify
   against directly. The syscall-number table it uses is x86_64-only.
+  `skillfence policy compile-apparmor` is the actual real-time answer —
+  it generates a genuine AppArmor profile a kernel LSM enforces natively
+  — but it's opt-in (the operator has to load it and launch the agent
+  under it), Debian/Ubuntu-only in practice, needs root to load, and
+  wasn't verified against a live `apparmor_parser` for the same
+  no-root-in-sandbox reason as auditd.
 - **Instruction detection is a deterministic pattern match**, not a model
   judgment — by design (the LLM is never the security engine, and the
   core must work with no LLM available at all). It will miss instructions
   phrased outside its patterns; that is expected at this stage.
-- **`skillfence dashboard` re-scans the filesystem on every refresh, no
-  index.** Fine for one lab or one MCP audit dir; a "whole fleet" root
-  with hundreds of accumulated sessions is a full walk every time and
-  will feel it, especially over a slow filesystem mount.
-- **AST02 detection is single-update-deep.** It compares against the
-  manifest immediately before the most recent `skill.update` step, not a
-  full version history / dependency graph.
+- **`skillfence dashboard`'s directory walk is cached but still
+  TTL-bound.** A persistent index (`skillfence/dashboard/index.py`,
+  stdlib `sqlite3`, `.skillfence/dashboard_index.sqlite3` in the scanned
+  root) caches both file contents and the directory walk itself, so a
+  dashboard left open costs close to nothing between refreshes and
+  doesn't start cold after a restart. A brand-new session can still take
+  up to `WALK_TTL_SECONDS` (5s) to appear if the walk cache hasn't
+  expired yet, and on a slow filesystem mount, the per-file `stat()`
+  calls the cache still needs to detect staleness remain real I/O —
+  caching removes the re-parse and re-walk cost, not that irreducible
+  cost.
 
 ## Roadmap
 
@@ -810,6 +871,10 @@ the 15/15 · 0/2 numbers above are enforced, not just claimed.
 - Network SOCKADDR parsing for `telemetry correlate` (currently reports a
   `connect` syscall as observed but doesn't decode the remote address)
 - AST06–AST10 coverage where runtime evidence is the right signal
+
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for release history.
 
 ## License
 

@@ -1,6 +1,6 @@
 [project]
 name = "skillfence"
-version = "0.3.0"
+version = "0.4.0"
 description = "Runtime behavioral security for Agentic Skills — traces what a skill actually does, not what it declares, and pauses consequential actions for human authorization before they execute."
 readme = "README.md"
 license = { text = "MIT" }

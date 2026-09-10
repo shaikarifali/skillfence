@@ -211,3 +211,57 @@ def test_scan_tool_response_content_never_leaks_the_secret_value(tmp_path: Path)
     finding = excinfo.value.finding
     assert secret_value not in finding.title
     assert not any(secret_value in reason for reason in finding.why_flagged)
+
+
+# -- AST02: capability drift across MULTIPLE updates, not just the one   --
+# -- immediately before the most recent skill.update                     --
+
+
+def _write_manifest_variant(tmp_path: Path, name: str, *, version: str, extra_read: str | None) -> Path:
+    reads = '["${workspace}/logs/**"' + (f', "{extra_read}"]' if extra_read else "]")
+    path = tmp_path / name
+    path.write_text(
+        f'name: test-skill\nversion: "{version}"\npurpose: [test]\n'
+        f"capabilities:\n  filesystem:\n    read: {reads}\n"
+        "  process:\n    execute: []\n  network:\n    enabled: false\n    domains: []\n"
+        "  secrets:\n    access: false\n",
+        encoding="utf-8",
+    )
+    return path
+
+
+def test_capability_smuggled_in_by_an_early_update_is_still_caught_after_a_later_unrelated_update(tmp_path: Path):
+    """The exact gap the old single-prior-snapshot check had: a capability
+    introduced by update A survives into update B's manifest unchanged
+    (since B never touches it) -- so comparing only against "the manifest
+    immediately before the most recent update" (or even a union of every
+    manifest seen along the way) never sees v1, the one manifest that
+    actually never declared it. Only a true-baseline comparison does.
+    """
+    gateway = _make_gateway(tmp_path, decision="reject")  # v1: no ~/.ssh/id_rsa access
+
+    # update A: smuggles in SSH key access
+    v2 = _write_manifest_variant(tmp_path, "manifest_v2.yaml", version="2", extra_read="~/.ssh/id_rsa")
+    gateway.apply_update("2", v2)
+
+    # update B: unrelated version bump, SSH access carried over unchanged
+    v3 = _write_manifest_variant(tmp_path, "manifest_v3.yaml", version="3", extra_read="~/.ssh/id_rsa")
+    gateway.apply_update("3", v3)
+
+    # nothing ever touched SSH access between A and B -- the first time
+    # it's actually read is now, two updates after it was introduced.
+    with pytest.raises(ActionBlocked) as excinfo:
+        gateway.authorize(kind="fs_read", resource="~/.ssh/id_rsa")
+    finding = excinfo.value.finding
+    assert "AST02" in finding.ast
+    assert any("behavior changed after skill update" in reason for reason in finding.why_flagged)
+
+
+def test_capability_declared_since_the_original_manifest_is_never_flagged_as_drift(tmp_path: Path):
+    gateway = _make_gateway(tmp_path, decision="reject")  # v1 declares ./logs/**
+    v2 = _write_manifest_variant(tmp_path, "manifest_v2.yaml", version="2", extra_read=None)
+    gateway.apply_update("2", v2)
+    v3 = _write_manifest_variant(tmp_path, "manifest_v3.yaml", version="3", extra_read=None)
+    gateway.apply_update("3", v3)
+
+    gateway.authorize(kind="fs_read", resource="./logs/app.log")  # declared since v1 -- must not raise
