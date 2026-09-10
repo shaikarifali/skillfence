@@ -20,6 +20,8 @@ currently covering:
 - **AST03 — Over-Privileged Skills**
 - **AST04 — Insecure Metadata**
 - **AST05 — Untrusted External Instructions**
+- **AST06 — Weak Isolation** (sandbox/path-traversal escape detection)
+- **AST07 — Update Drift** (MCP tool description rug-pull detection)
 
 It is not another `SKILL.md` scanner. It instruments what a skill actually
 causes an agent to do — filesystem, process, network, and external-content
@@ -870,7 +872,9 @@ the 15/15 · 0/2 numbers above are enforced, not just claimed.
   `twine upload` step is the only thing left
 - Network SOCKADDR parsing for `telemetry correlate` (currently reports a
   `connect` syscall as observed but doesn't decode the remote address)
-- AST06–AST10 coverage where runtime evidence is the right signal
+- AST08–AST10 coverage (Poor Scanning, No Governance, Cross-Platform
+  Reuse) where runtime evidence is the right signal — AST06 (Weak
+  Isolation) and AST07 (Update Drift) are already covered, see above
 
 ## Changelog
 
