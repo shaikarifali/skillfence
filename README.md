@@ -661,20 +661,35 @@ Behavior changed after update            +30
 Sandbox escape attempt                   +50
 New capability since baseline            +30
 Unresolvable MCP tool mapping            +50
+Live secret pattern found in content     +50
+MCP tool description poisoned            +50
+MCP tool description changed (rug-pull)  +50
+Instruction hidden via invisible Unicode +30
 
 0-29 LOW · 30-49 MEDIUM · 50-69 HIGH · 70+ CRITICAL
 ```
 
-The last three are newer, real-world-facing factors: a **sandbox escape
-attempt** is a path that resolves outside a lab's own sandbox root (or, via
-the MCP proxy, outside anywhere sensible) — scored above everything else,
-since an isolation break threatens more than just this one skill's declared
-scope. **New capability since baseline** fires when an action is *within*
-declared scope but has never been observed in any prior run of this
-skill — catching a manifest that's broad enough to cover a capability drift
-that never needed a version bump. **Unresolvable MCP tool mapping** is
-MCP-proxy-only: a real tool call with no entry in that server's tool map has
-no capability signal at all, which always routes to the human gate.
+Several of these are newer, real-world-facing factors, each scored to gate
+*on its own* rather than depending on some other factor also firing — a
+deliberate choice, since each one is independently strong evidence: a
+**sandbox escape attempt** is a path that resolves outside a lab's own
+sandbox root (or, via the MCP proxy, outside anywhere sensible) — scored
+above everything else, since an isolation break threatens more than just
+this one skill's declared scope. **New capability since baseline** fires
+when an action is *within* declared scope but has never been observed in
+any prior run of this skill — catching a manifest that's broad enough to
+cover a capability drift that never needed a version bump.
+**Unresolvable MCP tool mapping** is MCP-proxy-only: a real tool call with
+no entry in that server's tool map has no capability signal at all, which
+always routes to the human gate. **Live secret pattern found in content**
+catches a declared, innocuous-looking path whose *content* still leaks a
+credential — path-based checks alone see nothing wrong. **MCP tool
+description poisoned** and **changed (rug-pull)** both fire from scanning
+a real server's `tools/list` response before the agent ever sees it, not
+from anything the agent did. **Instruction hidden via invisible Unicode**
+is an aggravating factor layered on top of whichever instruction-detection
+factor it accompanies (not a replacement for it) — deliberate evasion is
+itself evidence of intent.
 
 Every finding also carries a **Capability Drift Score (CDS)** — the same
 score normalized to 0.0-1.0, with an ALLOW/WARN/GATE/BLOCK band
