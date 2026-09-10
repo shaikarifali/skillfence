@@ -1,0 +1,16 @@
+# Which of fake_server.py's real tool names map to which SkillFence
+# action kind, and which JSON-RPC argument holds the resource string to
+# evaluate against manifest.yaml. `mystery_tool` is deliberately left out
+# to demonstrate unmapped_tool_policy.
+unmapped_tool_policy: gate  # gate | allow | block
+
+tools:
+  read_file:
+    kind: fs_read
+    resource_arg: path
+  run_command:
+    kind: process_exec
+    resource_arg: command
+  web_fetch:
+    kind: network
+    resource_arg: url

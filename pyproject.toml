@@ -1,14 +1,53 @@
 [project]
 name = "skillfence"
-version = "0.1.0"
-description = "DVAS-Runtime / SkillFence — runtime behavioral security for Agentic Skills"
+version = "0.3.0"
+description = "Runtime behavioral security for Agentic Skills — traces what a skill actually does, not what it declares, and pauses consequential actions for human authorization before they execute."
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "Shaik Arif Ali" }]
 requires-python = ">=3.10"
+keywords = [
+    "agentic-ai",
+    "ai-security",
+    "mcp",
+    "model-context-protocol",
+    "runtime-security",
+    "prompt-injection",
+    "owasp",
+    "capability-drift",
+    "human-in-the-loop",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Information Technology",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Security",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
 dependencies = [
     "pydantic>=2.6",
     "typer>=0.12",
     "rich>=13.7",
     "pyyaml>=6.0",
+    "cryptography>=42",
 ]
+
+[project.optional-dependencies]
+langchain = ["langchain-core>=0.3"]
+crewai = ["crewai>=1.0"]
+adk = ["google-adk>=1.0"]
+
+[project.urls]
+Homepage = "https://github.com/shaikarifali/skillfence"
+Repository = "https://github.com/shaikarifali/skillfence"
+Labs = "https://github.com/shaikarifali/DVAS"
+Issues = "https://github.com/shaikarifali/skillfence/issues"
 
 [project.scripts]
 skillfence = "skillfence.cli.main:app"

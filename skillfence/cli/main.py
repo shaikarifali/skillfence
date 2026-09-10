@@ -41,6 +41,10 @@ Quick start — checking YOUR OWN skill:
   See examples/my-first-skill/ for a copy-paste starting template, and the
   top-level README's "Using SkillFence on your own skill" section for the full guide.
 
+Quick start — protecting a REAL MCP server, live:
+  skillfence mcp-proxy --manifest m.yaml --tool-map t.yaml -- node real-server.js
+  See examples/mcp-proxy/ for a complete worked example.
+
 Run `skillfence <command> --help` for that command's own examples.
 """
 
@@ -53,6 +57,10 @@ lab_app = typer.Typer(add_completion=False, help="Discover labs.")
 app.add_typer(lab_app, name="lab")
 policy_app = typer.Typer(add_completion=False, help="Manage org-wide policy grants (Decision Memory).")
 app.add_typer(policy_app, name="policy")
+audit_app = typer.Typer(add_completion=False, help="Sign and verify evidence files (tamper-evident audit trail).")
+app.add_typer(audit_app, name="audit")
+telemetry_app = typer.Typer(add_completion=False, help="Correlate OS-level (auditd) telemetry against a SkillFence session.")
+app.add_typer(telemetry_app, name="telemetry")
 console = Console()
 
 DEFAULT_LABS_ROOT = Path("DVAS")
@@ -370,18 +378,28 @@ def policy_revoke(
     epilog="Examples:\n  skillfence report DVAS/AST05/external-doc-injection\n"
     "  skillfence report DVAS/AST05/external-doc-injection --json\n"
     "  skillfence report DVAS/AST05/external-doc-injection --markdown\n"
+    "  skillfence report DVAS/AST05/external-doc-injection --sarif > results.sarif   # for github/codeql-action/upload-sarif\n"
+    "  skillfence report DVAS/AST05/external-doc-injection --html > report.html      # shareable, open in any browser\n"
 )
 def report(
     lab: Path = typer.Argument(..., help="Path to a lab directory previously run with `skillfence run`"),
     as_json: bool = typer.Option(False, "--json", help="Emit machine-readable JSON instead of the text report."),
     as_markdown: bool = typer.Option(False, "--markdown", help="Emit a Markdown report instead of the text report."),
+    as_sarif: bool = typer.Option(False, "--sarif", help="Emit SARIF 2.1.0 for GitHub code scanning / any SARIF-consuming CI."),
+    as_html: bool = typer.Option(False, "--html", help="Emit a self-contained HTML report — shareable, no server needed."),
 ):
     """Security assessment report — rolls up a lab's recorded findings into
     skill / risk / AST / findings / attack-chain / decision / evidence-count
     form."""
     lab = _resolve_lab(lab)
     rpt = build_report(lab)
-    if as_json:
+    if as_html:
+        print(rpt.to_html())
+    elif as_sarif:
+        import json
+
+        print(json.dumps(rpt.to_sarif(), indent=2))
+    elif as_json:
         import json
 
         print(json.dumps(rpt.to_dict(), indent=2))
@@ -389,6 +407,81 @@ def report(
         print(rpt.to_markdown())
     else:
         console.print(rpt.to_text())
+
+
+@app.command(
+    epilog="Examples:\n  skillfence profile DVAS/AST01/credential-reader\n"
+    "  skillfence profile DVAS/AST01/credential-reader --json\n"
+)
+def profile(
+    lab: Path = typer.Argument(..., help="Path to a lab or skill directory previously run with `skillfence run`/`observe`"),
+    as_json: bool = typer.Option(False, "--json", help="Emit machine-readable JSON instead of the text profile."),
+):
+    """Skill Security Profile — one consolidated view of what a skill
+    declares, what it's actually been observed doing, whether its behavior
+    has drifted since its last run, and its finding history. Reuses the
+    same fingerprint history and findings.jsonl `run` already writes; this
+    doesn't add a new detector, it just stops making you reassemble the
+    picture from `inspect` + a fingerprint diff + `findings` by hand."""
+    lab = _resolve_lab(lab)
+    from skillfence.reporting.skill_profile import build_profile
+
+    try:
+        prof = build_profile(lab)
+    except FileNotFoundError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(1)
+    if as_json:
+        import json
+
+        print(json.dumps(prof.to_dict(), indent=2))
+    else:
+        console.print(prof.to_text())
+
+
+@app.command(
+    epilog="Examples:\n  skillfence dashboard DVAS\n  skillfence dashboard .skillfence/mcp --port 9000\n"
+    "  skillfence dashboard . --no-browser\n"
+)
+def dashboard(
+    root: Path = typer.Argument(
+        Path("."), help="Directory to scan for sessions -- a lab dir, an MCP proxy audit dir, or a whole fleet root"
+    ),
+    port: int = typer.Option(0, "--port", help="Port to bind (127.0.0.1 only). 0 (default) picks a free port."),
+    open_browser: bool = typer.Option(True, "--browser/--no-browser", help="Open the dashboard in a browser tab on start."),
+):
+    """A local, read-only web view over evidence SkillFence already wrote —
+    every session found under ROOT (`.runs/*.events.jsonl` from lab runs,
+    `*.events.jsonl` from an MCP proxy audit dir), its findings, its
+    provenance chain, and its Capability Drift Score, in one page. No new
+    storage: it re-reads the same JSONL files `findings`/`replay`/`profile`
+    already read, re-scanned on every browser refresh, so leaving it open
+    during a live `run`/`mcp-proxy` session shows new events as they land.
+    Bound to 127.0.0.1 only — never reachable from another machine. Point
+    it at one lab or one MCP audit dir for a snappy view; a "whole fleet"
+    root with hundreds of accumulated sessions is a full filesystem walk
+    on every refresh and will feel it, especially over a slow mount."""
+    import webbrowser
+
+    from skillfence.dashboard.server import build_server
+
+    if not root.exists():
+        console.print(f"[red]{root} does not exist[/red]")
+        raise typer.Exit(1)
+
+    server = build_server(root, port=port)
+    url = f"http://127.0.0.1:{server.server_address[1]}/"
+    console.print(f"[bold green]SkillFence Dashboard[/bold green] — {url}")
+    console.print(f"  scanning: {root.resolve()}")
+    console.print("  Ctrl-C to stop\n")
+    if open_browser:
+        webbrowser.open(url)
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        server.server_close()
 
 
 @app.command(epilog="Examples:\n  skillfence learn\n")
@@ -450,6 +543,15 @@ def bench(
         gt = yaml.safe_load(gt_path.read_text(encoding="utf-8"))
         result = run_lab(lab_dir, decision="reject")
         n_findings = len(result.findings)
+
+        # `run_lab` always persists events.jsonl (via EventBus) regardless
+        # of caller -- findings must be just as durable, or a bench run
+        # (e.g. the one CI runs on every push) leaves no audit trail at
+        # all for what it detected, only a console table that scrolls away.
+        findings_path = _runs_dir(lab_dir) / "findings.jsonl"
+        for finding in result.findings:
+            append_jsonl(findings_path, finding.model_dump())
+
         is_malicious = bool(gt["ground_truth"]["malicious"])
         label = lab_dir.relative_to(labs_root.resolve()).as_posix()
 
@@ -477,12 +579,18 @@ def bench(
                   f"(0 expected on benign labs, {malicious_total} expected on malicious labs)")
 
 
-@app.command(epilog="Examples:\n  skillfence findings DVAS/AST05/external-doc-injection\n")
+@app.command(
+    epilog="Examples:\n  skillfence findings DVAS/AST05/external-doc-injection\n"
+    "  skillfence findings .skillfence/mcp/mcp-a1b2c3d4.findings.jsonl   # a specific mcp-proxy session\n"
+)
 def findings(
-    lab: Path = typer.Argument(..., help="Path to a lab directory previously run with `skillfence run`"),
+    lab: Path = typer.Argument(
+        ..., help="A lab directory previously run with `skillfence run`, or a *.findings.jsonl file directly (e.g. from mcp-proxy)"
+    ),
 ):
-    """Print explainable findings recorded for a lab."""
-    path = _runs_dir(lab.resolve()) / "findings.jsonl"
+    """Print explainable findings recorded for a lab or an mcp-proxy session."""
+    resolved = lab.resolve()
+    path = resolved if resolved.suffix == ".jsonl" else _runs_dir(resolved) / "findings.jsonl"
     rows = list(read_jsonl(path))
     if not rows:
         console.print(f"[yellow]No findings recorded at {path}[/yellow]")
@@ -532,6 +640,194 @@ def replay(
         resource = row.get("resource") or ""
         decision = row.get("decision", "")
         console.print(f"[dim]{ts}[/dim]  {etype:<40} {resource:<40} [bold]{decision}[/bold]")
+
+
+MCP_PROXY_EXAMPLES = """\
+Examples:
+  skillfence mcp-proxy --manifest server-manifest.yaml --tool-map tool-map.yaml -- node real-server.js
+  skillfence mcp-proxy --manifest server-manifest.yaml --tool-map tool-map.yaml --fresh -- python real_server.py
+  See examples/mcp-proxy/ for a complete worked example (manifest, tool map,
+  and a tiny fixture "real" server to point it at).
+"""
+
+
+@app.command(
+    name="mcp-proxy",
+    epilog=MCP_PROXY_EXAMPLES,
+    context_settings={"ignore_unknown_options": True},
+)
+def mcp_proxy_cmd(
+    target: list[str] = typer.Argument(
+        ..., help="The real MCP server command to launch, e.g. `-- node real-server.js --port 1234`"
+    ),
+    manifest: Path = typer.Option(
+        ..., "--manifest", help="Capability manifest (same schema as skill/manifest.yaml) for what this server's tools may do"
+    ),
+    tool_map: Path = typer.Option(
+        ..., "--tool-map", help="Tool map YAML: which of the server's real tool names map to which SkillFence action kind"
+    ),
+    audit_dir: Path = typer.Option(
+        Path(".skillfence/mcp"), "--audit-dir", help="Where this session's event/finding JSONL is written"
+    ),
+    fresh: bool = typer.Option(False, "--fresh", help="Ignore the shared, org-wide policy store for this session."),
+):
+    """Put SkillFence in front of a real MCP server. To the real client
+    (Claude Code, or any MCP-speaking agent) this proxy IS the MCP server;
+    to the real downstream server, this proxy IS the client. Every
+    `tools/call` is authorized through the same policy/risk/human-gate
+    pipeline the DVAS labs use before the real request is ever forwarded —
+    everything else passes through unmodified. HIGH/CRITICAL actions
+    fail-safe deny by default (no interactive TTY is available on a shared
+    stdio channel) — pre-authorize expected actions with
+    `skillfence policy allow`, then review `skillfence findings` for
+    anything that got blocked."""
+    from skillfence.mcp.proxy import MCPProxy
+
+    proxy = MCPProxy(
+        target_command=target,
+        manifest_path=manifest,
+        toolmap_path=tool_map,
+        audit_dir=audit_dir,
+        fresh=fresh,
+    )
+    proxy.run()
+
+
+@audit_app.command("keygen", epilog="Examples:\n  skillfence audit keygen\n")
+def audit_keygen(
+    private_key: Path = typer.Option(
+        Path(".skillfence/audit_signing_key"), "--private-key", help="Where to write the new private key"
+    ),
+    public_key: Path = typer.Option(
+        Path(".skillfence/audit_signing_key.pub"), "--public-key", help="Where to write the matching public key"
+    ),
+):
+    """Generate a new local Ed25519 keypair for signing evidence files.
+    Run once. Keep the private key; hand the public key to anyone who
+    needs to independently verify your evidence — they never need the
+    private key to do so."""
+    from skillfence.audit.signing import generate_keypair
+
+    try:
+        generate_keypair(private_key_path=private_key, public_key_path=public_key)
+    except FileExistsError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(1)
+    console.print(f"[green]Keypair created.[/green]  private: {private_key}   public: {public_key}")
+    console.print("[dim]The private key never needs to leave this machine. Share the .pub file with reviewers.[/dim]")
+
+
+@audit_app.command(
+    "sign",
+    epilog="Examples:\n"
+    "  skillfence audit sign DVAS/AST05/external-doc-injection/.runs/findings.jsonl\n"
+    "  skillfence audit sign .skillfence/mcp/mcp-abc123.findings.jsonl\n",
+)
+def audit_sign(
+    target: Path = typer.Argument(..., help="Any evidence file to sign — findings.jsonl, events.jsonl, a rendered report"),
+    private_key: Path = typer.Option(Path(".skillfence/audit_signing_key"), "--private-key"),
+):
+    """Sign an evidence file's current contents with your local private
+    key, writing a `<file>.sig.json` sidecar. Re-run after the file
+    changes to re-sign it — a stale signature will fail verification."""
+    from skillfence.audit.signing import sign_file
+
+    if not target.exists():
+        console.print(f"[red]{target} does not exist[/red]")
+        raise typer.Exit(1)
+    try:
+        sig_path = sign_file(target, private_key_path=private_key)
+    except FileNotFoundError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(1)
+    console.print(f"[green]Signed.[/green] {sig_path}")
+
+
+@audit_app.command(
+    "verify",
+    epilog="Examples:\n"
+    "  skillfence audit verify DVAS/AST05/external-doc-injection/.runs/findings.jsonl\n"
+    "  skillfence audit verify findings.jsonl --public-key colleague-public-key.pub\n",
+)
+def audit_verify(
+    target: Path = typer.Argument(..., help="The evidence file to verify"),
+    public_key: Path = typer.Option(
+        Path(".skillfence/audit_signing_key.pub"), "--public-key", help="The signer's public key"
+    ),
+):
+    """Verify an evidence file hasn't changed since it was signed. Only
+    needs the *public* key — this is exactly the step a reviewer who
+    didn't produce the evidence runs, independently."""
+    from skillfence.audit.signing import verify_file
+
+    result = verify_file(target, public_key_path=public_key)
+    if result.valid:
+        console.print(f"[bold green]VALID[/bold green]  {result.reason}")
+    else:
+        console.print(f"[bold red]INVALID[/bold red]  {result.reason}")
+        raise typer.Exit(1)
+
+
+@telemetry_app.command(
+    "correlate",
+    epilog="Examples:\n"
+    "  skillfence telemetry correlate DVAS/AST01/credential-reader/.runs/<session>.events.jsonl /var/log/audit/audit.log\n"
+    "  skillfence telemetry correlate .skillfence/mcp/<session>.events.jsonl audit-window.log --pid 4821\n"
+    "  ausearch -k skillfence --format raw | skillfence telemetry correlate <session>.events.jsonl -\n",
+)
+def telemetry_correlate(
+    events_file: Path = typer.Argument(..., help="A *.events.jsonl file produced by a previous `skillfence run`/`mcp-proxy` session"),
+    audit_log: Path = typer.Argument(..., help="A file of raw auditd log lines covering the session's time window. Use '-' to read from stdin."),
+    pid: Optional[int] = typer.Option(
+        None, "--pid", help="Restrict correlation to this PID (the real agent/proxy process) -- omit for time-window-only correlation, which is weaker evidence"
+    ),
+):
+    """Layer A (every command in this tool) only sees actions taken
+    through an instrumented tool wrapper. An agent with real shell/code-exec
+    access can act entirely outside that boundary. This correlates an
+    existing OS-level telemetry source (Linux `auditd` — not a bespoke
+    SkillFence syscall monitor; wraps a mature, already-deployed tool the
+    same way `bench` wraps DVAS) against this session's own event log, and
+    reports anything auditd saw that SkillFence's instrumented layer never
+    did. Matching is name/path-suffix based, not exact — a lead worth
+    review, not a deterministic verdict like the rest of this tool's
+    findings. Set up auditd rules first, e.g.:
+      auditctl -a always,exit -F arch=b64 -S execve,execveat -k skillfence
+      auditctl -a always,exit -F arch=b64 -S open,openat -k skillfence"""
+    import sys
+
+    from skillfence.storage.jsonl_store import read_jsonl
+    from skillfence.telemetry.auditd import parse_audit_log
+    from skillfence.telemetry.correlate import correlate
+
+    session_events = list(read_jsonl(events_file))
+    if not session_events:
+        console.print(f"[yellow]No events found in {events_file}[/yellow]")
+        raise typer.Exit(0)
+
+    audit_text = sys.stdin.read() if str(audit_log) == "-" else audit_log.read_text(encoding="utf-8")
+    audit_events = parse_audit_log(audit_text)
+
+    report = correlate(session_events, audit_events, pid=pid)
+
+    console.rule("[bold]Telemetry Correlation[/bold]")
+    console.print(f"session: {events_file.name}   audit records parsed: {len(audit_events)}   pid filter: {pid or 'none'}\n")
+    console.print(f"[green]matched[/green]: {len(report.matched)}  (seen by both SkillFence and auditd)")
+    console.print(f"[dim]observed (network, unmatched by design)[/dim]: {len(report.observed_network)}")
+    console.print(f"[bold red]untracked[/bold red]: {len(report.untracked)}  (auditd saw this; SkillFence's instrumented layer did not)\n")
+
+    for tf in report.untracked:
+        ae = tf.audit_event
+        console.print(f"  [bold red][{tf.confidence.upper()}][/bold red] {tf.reason}")
+        console.print(f"    pid={ae.pid} comm={ae.comm} exe={ae.exe} paths={ae.paths or '-'}")
+
+    if report.bypass_suspected:
+        console.print(
+            "\n[bold red]Possible Layer-A bypass[/bold red]: OS-level activity with no corresponding "
+            "SkillFence event exists for this session. Review the entries above."
+        )
+    else:
+        console.print("\n[green]No untracked OS-level activity found for this session/pid.[/green]")
 
 
 @app.command()

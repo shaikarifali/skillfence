@@ -1,0 +1,36 @@
+# Copy this into YOUR repo at .github/workflows/skillfence.yml — not
+# SkillFence's own repo. This is what a repo that SHIPS an Agentic Skill
+# would use to gate its PRs on SkillFence catching undeclared/drifted
+# behavior before merge, and (optionally) surface findings in GitHub's
+# code scanning UI alongside CodeQL/other SARIF-producing tools.
+
+name: skillfence
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+  security-events: write  # only needed if you set upload-sarif: 'true' below
+
+jobs:
+  static-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shaikarifali/skillfence@main
+        with:
+          path: ./my-skill        # a directory with skill/manifest.yaml + skill/SKILL.md
+          mode: inspect            # static only — fast, no execution, good for every PR
+
+  runtime-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shaikarifali/skillfence@main
+        with:
+          path: ./my-skill        # also needs script.yaml (see examples/my-first-skill/)
+          mode: run
+          decision: reject         # non-interactive — CI has no human to prompt
+          fail-on-findings: "true" # fail this check if SkillFence recorded anything
+          upload-sarif: "true"     # surface results in the Security tab too

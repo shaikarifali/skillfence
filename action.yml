@@ -1,0 +1,76 @@
+name: "SkillFence Scan"
+description: "Statically inspect or runtime-benchmark Agentic Skills with SkillFence — gate a PR on undeclared/drifted behavior, with optional SARIF upload to GitHub code scanning."
+branding:
+  icon: "shield"
+  color: "green"
+
+inputs:
+  path:
+    description: "Path to the skill or lab directory to scan"
+    required: true
+  mode:
+    description: >
+      "inspect" (static — reads skill/manifest.yaml only, no execution),
+      "run" (executes script.yaml through the real runtime gateway, needs
+      --decision since CI has no human to prompt), or "bench" (scores
+      every lab under path against its ground-truth.yaml — for a repo of
+      DVAS-style labs, not a single skill).
+    default: "inspect"
+  decision:
+    description: "mode=run only: the non-interactive decision forced at every gate"
+    default: "reject"
+  fail-on-findings:
+    description: "mode=run only: fail this check if SkillFence recorded any finding"
+    default: "true"
+  upload-sarif:
+    description: >
+      mode=run only: upload results to GitHub code scanning. Requires the
+      calling workflow to declare `permissions: security-events: write`.
+    default: "false"
+  skillfence-ref:
+    description: "Which SkillFence git ref to install (branch, tag, or commit)"
+    default: "main"
+
+outputs:
+  findings:
+    description: "mode=run only: number of findings SkillFence recorded"
+    value: ${{ steps.skillfence_run.outputs.findings }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Install SkillFence
+      shell: bash
+      run: pip install "skillfence @ git+https://github.com/shaikarifali/skillfence@${{ inputs.skillfence-ref }}"
+
+    - name: Inspect (static)
+      if: inputs.mode == 'inspect'
+      shell: bash
+      run: skillfence inspect "${{ inputs.path }}"
+
+    - name: Run (dynamic)
+      if: inputs.mode == 'run'
+      id: skillfence_run
+      shell: bash
+      run: |
+        set -e
+        skillfence run "${{ inputs.path }}" --decision "${{ inputs.decision }}"
+        skillfence report "${{ inputs.path }}" --sarif > skillfence-results.sarif
+        FINDINGS=$(skillfence report "${{ inputs.path }}" --json | python3 -c "import json,sys; print(len(json.load(sys.stdin)['findings']))")
+        echo "findings=$FINDINGS" >> "$GITHUB_OUTPUT"
+        echo "SkillFence recorded $FINDINGS finding(s) for ${{ inputs.path }}"
+        if [ "${{ inputs.fail-on-findings }}" = "true" ] && [ "$FINDINGS" -gt 0 ]; then
+          echo "::error::SkillFence recorded $FINDINGS finding(s) — failing this check. Run \`skillfence findings ${{ inputs.path }}\` locally for full evidence."
+          exit 1
+        fi
+
+    - name: Upload SARIF to code scanning
+      if: inputs.mode == 'run' && inputs.upload-sarif == 'true'
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: skillfence-results.sarif
+
+    - name: Bench (scored corpus)
+      if: inputs.mode == 'bench'
+      shell: bash
+      run: skillfence bench "${{ inputs.path }}"

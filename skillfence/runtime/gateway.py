@@ -26,10 +26,15 @@ from skillfence.hitl.cli_gate import HumanGate
 from skillfence.hitl.decisions import DecisionRecord, DecisionRequest, DecisionType
 from skillfence.policy.engine import PolicyEngine, PolicyResult
 from skillfence.policy.manifest import CapabilityManifest
+from skillfence.policy.secret_scan import scan_for_secrets
 from skillfence.policy.store import PolicyStore
 from skillfence.provenance.graph import ProvenanceGraph
 from skillfence.risk.engine import RiskAssessment, RiskEngine
-from skillfence.runtime.content_scan import detect_instruction, parse_injected_action
+from skillfence.runtime.content_scan import (
+    detect_hidden_unicode_payload,
+    detect_instruction,
+    parse_injected_action,
+)
 from skillfence.runtime.sandbox import Sandbox
 
 
@@ -71,6 +76,19 @@ class RuntimeGateway:
 
         self._external_instruction_active = False
         self._external_instruction_event_id: str | None = None
+        # Set by any of the three instruction-scan sites (skill definition,
+        # fetched content, MCP tool description) when the instruction that
+        # fired was only visible after normalization -- i.e. hidden via
+        # invisible Unicode. Session-sticky like the flags above it, so
+        # every subsequent enforced action in this session carries the
+        # extra "evasion was attempted" weight, not just the detection
+        # event itself.
+        self._hidden_unicode_payload_active = False
+        # MCP proxy only: tool names flagged by scan_mcp_tool_description()
+        # this session -- a poisoned/rug-pulled description was already
+        # blocked at tools/list time, but a call made with a description an
+        # agent cached from an earlier session should still carry the flag.
+        self._poisoned_mcp_tools: set[str] = set()
         # LPCI: instruction-like text found in the skill's
         # *own* definition, scanned once at start() — opt-in per lab (see
         # lab_runner) so an unrelated lab's SKILL.md prose that happens to
@@ -109,6 +127,8 @@ class RuntimeGateway:
                 )
                 self._logic_layer_instruction_active = True
                 self._logic_layer_instruction_event_id = instr_event.event_id
+                if detect_hidden_unicode_payload(self._skill_definition_text):
+                    self._hidden_unicode_payload_active = True
                 injected = parse_injected_action(self._skill_definition_text)
                 if injected:
                     self._logic_layer_injected_step = injected
@@ -158,18 +178,267 @@ class RuntimeGateway:
 
     # -- wrapped tool calls -------------------------------------------------
 
+    def authorize(
+        self,
+        *,
+        kind: str,
+        resource: str,
+        parent_event: str | None = None,
+        tool_name: str | None = None,
+    ) -> None:
+        """Decision-only authorization -- no I/O performed here.
+
+        The lab wrapper methods below (read_file/write_file/execute_shell/
+        access_secret/network_send) both decide *and* perform a simulated
+        action against the lab's fake sandbox. An adapter fronting a *real*
+        system -- the MCP proxy is the first one -- needs the opposite
+        split: SkillFence makes the allow/gate/block decision, and the real
+        downstream server (not SkillFence) performs the real action once
+        granted. `kind` is one of "fs_read", "fs_write", "process_exec",
+        "network", "secret". `tool_name` (MCP proxy only) carries extra
+        weight when scan_mcp_tool_description() already flagged this exact
+        tool this session -- a call made against a description the agent
+        cached before the flag fired must not skip the elevated scrutiny.
+        Raises ActionBlocked on reject; returns normally (None) on allow --
+        the caller forwards the real request only after this returns
+        without raising.
+        """
+        parent = parent_event or self.invoke_event_id
+        tool_flagged = tool_name is not None and tool_name in self._poisoned_mcp_tools
+        if kind == "fs_read":
+            policy_result = self.policy.evaluate_fs_read(resource)
+            self._enforce(
+                event_type=EventType.FS_READ,
+                resource=resource,
+                policy_result=policy_result,
+                parent_event=parent,
+                action_label="filesystem.read",
+                title="Filesystem read outside declared capability" if not policy_result.declared else "Sensitive filesystem read",
+                ast=self._ast_for(fs=True),
+                extra_risk={"tool_description_poisoned": tool_flagged} if tool_flagged else None,
+            )
+        elif kind == "fs_write":
+            policy_result = self.policy.evaluate_fs_write(resource)
+            self._enforce(
+                event_type=EventType.FS_WRITE,
+                resource=resource,
+                policy_result=policy_result,
+                parent_event=parent,
+                action_label="filesystem.write",
+                title="Filesystem write outside declared capability",
+                ast=self._ast_for(fs=True),
+                extra_risk={"tool_description_poisoned": tool_flagged} if tool_flagged else None,
+            )
+        elif kind == "process_exec":
+            executable = resource.split()[0] if resource else ""
+            policy_result = self.policy.evaluate_process(executable)
+            self._enforce(
+                event_type=EventType.PROCESS_EXEC,
+                resource=resource,
+                policy_result=policy_result,
+                parent_event=parent,
+                action_label="process.exec",
+                title="Process execution outside declared capability",
+                ast=["AST03"],
+                extra_risk={"tool_description_poisoned": tool_flagged} if tool_flagged else None,
+            )
+        elif kind == "network":
+            domain = urlparse(resource).netloc or resource
+            policy_result = self.policy.evaluate_network(domain)
+            metadata_mismatch = (
+                self.manifest.capabilities.network.enabled
+                and bool(self.manifest.capabilities.network.domains)
+                and not policy_result.declared
+            )
+            self._enforce(
+                event_type=EventType.NET_HTTP_REQUEST,
+                resource=resource,
+                policy_result=policy_result,
+                parent_event=parent,
+                action_label="network.http_request",
+                title="Outbound network request outside declared capability",
+                ast=self._ast_for(network=True, metadata_mismatch=metadata_mismatch),
+                extra_risk={
+                    "network_egress": True,
+                    "unknown_destination": not policy_result.declared,
+                    "tool_description_poisoned": tool_flagged,
+                },
+                details={"domain": domain},
+            )
+        elif kind == "secret":
+            policy_result = self.policy.evaluate_env_secret(resource)
+            self._enforce(
+                event_type=EventType.SECRET_ACCESS,
+                resource=resource,
+                policy_result=policy_result,
+                parent_event=parent,
+                action_label="secret.access",
+                title="Secret/credential access outside declared scope" if not policy_result.declared else "Sensitive secret access",
+                ast=["AST03", "AST04"],
+                extra_risk={"tool_description_poisoned": tool_flagged} if tool_flagged else None,
+            )
+        elif kind == "unmapped":
+            # MCP proxy only: a real tool this server's tool map has no
+            # entry for. There is no manifest to check against -- that's
+            # the point -- so this always routes to the human gate,
+            # deterministically, via a dedicated risk factor rather than a
+            # bypass flag (see SCORE_UNRESOLVABLE_TOOL_MAPPING).
+            policy_result = PolicyResult(declared=False, sensitive=False, reasons=["no entry in this server's tool map"])
+            self._enforce(
+                event_type=EventType.TOOL_REQUEST,
+                resource=resource,
+                policy_result=policy_result,
+                parent_event=parent,
+                action_label="tool.request",
+                title="Real MCP tool call with no capability mapping",
+                ast=["AST03"],
+                extra_risk={"unresolvable_tool_mapping": True},
+            )
+        else:
+            raise ValueError(f"unknown authorize() kind: {kind}")
+
+    def scan_mcp_tool_description(
+        self, tool_name: str, description: str, *, parent_event: str | None = None
+    ) -> None:
+        """MCP tool poisoning (MCP proxy only): a real downstream server's
+        `tools/list` response described a tool using instruction-like text
+        aimed at the agent, not the human reviewing the tool list. Most MCP
+        clients hand every tool description to the model as trusted context
+        before any tool is ever called -- reading the description *is* the
+        attack, so this must be checked at list time, independent of
+        whether the tool is ever invoked. Raises ActionBlocked on a match
+        (headless MCP deployment fails safe/denies); the caller is expected
+        to redact this one tool's description in the relayed response
+        rather than let the whole tools/list call fail.
+        """
+        parent = parent_event or self.invoke_event_id
+        instruction = detect_instruction(description)
+        if not instruction:
+            return
+        hidden = detect_hidden_unicode_payload(description)
+        if hidden:
+            self._hidden_unicode_payload_active = True
+        policy_result = PolicyResult(
+            declared=False, sensitive=False, reasons=["tool description contains instruction-like content"]
+        )
+        try:
+            self._enforce(
+                event_type=EventType.MCP_TOOL_DESCRIPTION_POISONED,
+                resource=tool_name,
+                policy_result=policy_result,
+                parent_event=parent,
+                action_label="mcp.tool_description_scan",
+                title="MCP tool description contains embedded instruction-like content (tool poisoning)",
+                ast=["AST05"],
+                extra_risk={"tool_description_poisoned": True},
+                details={"matched": instruction},
+            )
+        finally:
+            # Flag persists even on the allow path (a human may have
+            # approved it once) so any later call of this exact tool still
+            # carries the elevated context in why_flagged/provenance.
+            self._poisoned_mcp_tools.add(tool_name)
+            self._external_instruction_active = True
+
+    def flag_tool_description_changed(self, tool_name: str, *, parent_event: str | None = None) -> None:
+        """MCP rug-pull (MCP proxy only): this exact tool name was seen in a
+        prior proxy run with a different description, and nothing on the
+        wire (a version bump, a manifest change) explains the change. Fires
+        independent of whether the new description itself looks malicious --
+        an unexplained silent change is the signal, since the classic
+        rug-pull ships an innocuous description at review time and swaps in
+        a malicious one later.
+        """
+        parent = parent_event or self.invoke_event_id
+        policy_result = PolicyResult(
+            declared=False, sensitive=False, reasons=["tool description changed since last seen, unexplained"]
+        )
+        try:
+            self._enforce(
+                event_type=EventType.MCP_TOOL_DESCRIPTION_CHANGED,
+                resource=tool_name,
+                policy_result=policy_result,
+                parent_event=parent,
+                action_label="mcp.tool_description_scan",
+                title="MCP tool description changed since it was last seen (possible rug-pull)",
+                ast=["AST07"],
+                extra_risk={"tool_description_changed": True},
+            )
+        finally:
+            self._poisoned_mcp_tools.add(tool_name)
+
+    def scan_tool_response_content(
+        self, tool_name: str, content: str, *, parent_event: str | None = None
+    ) -> None:
+        """MCP proxy only: the same content-based secret detection
+        `read_file()` applies to lab filesystem reads, applied to whatever
+        a real downstream MCP server's tool call actually returned.
+        Bidirectional counterpart to `scan_mcp_tool_description` -- that
+        one covers what the server *describes* itself as, this one covers
+        what it *returns*. A plainly-named, harmless-sounding tool can
+        still hand back a live credential pasted into its response text --
+        exactly the failure mode a tool-name/kind-based check alone can
+        never catch. `declared=True` here isn't a real capability check
+        (a response isn't a capability request) -- it exists only so the
+        live-secret-in-content factor is what drives the decision on its
+        own, the same way it does for read_file().
+        """
+        parent = parent_event or self.invoke_event_id
+        secret_labels = scan_for_secrets(content)
+        if not secret_labels:
+            return
+        policy_result = PolicyResult(
+            declared=True, sensitive=False, reasons=["live credential pattern in tool response content"]
+        )
+        self._enforce(
+            event_type=EventType.TOOL_RESULT,
+            resource=tool_name,
+            policy_result=policy_result,
+            parent_event=parent,
+            action_label="mcp.tool_response_scan",
+            title="Live credential pattern found in MCP tool response",
+            ast=["AST01"],
+            extra_risk={"secret_labels": secret_labels},
+            details={"secret_labels": secret_labels},
+        )
+
     def read_file(self, path: str, *, parent_event: str | None = None) -> str:
         parent = parent_event or self.invoke_event_id
         policy_result = self.policy.evaluate_fs_read(path)
+        escape = self.sandbox.escapes_root(path)
+
+        # Peek the real content *before* deciding, when it's safe to do so
+        # (never for an escape attempt -- that path must never be touched
+        # at all). A plainly-named, declared-looking file can still have a
+        # live credential pasted inside it: path-based sensitivity alone
+        # can't see that, only the content can. Feeding this into the same
+        # enforcement decision (not a separate after-the-fact log) means a
+        # secret-laden read can genuinely be rejected, not just noticed.
+        secret_labels: list[str] = []
+        if not escape:
+            peek_path = self.sandbox.resolve(path)
+            if peek_path.exists():
+                secret_labels = scan_for_secrets(peek_path.read_text(encoding="utf-8"))
+
         grant = self._enforce(
             event_type=EventType.FS_READ,
             resource=path,
             policy_result=policy_result,
             parent_event=parent,
             action_label="filesystem.read",
-            title="Filesystem read outside declared capability" if not policy_result.declared else "Sensitive filesystem read",
-            ast=self._ast_for(fs=True),
+            title="Sandbox escape attempt" if escape else (
+                "Live credential pattern found in file content" if secret_labels else (
+                    "Filesystem read outside declared capability" if not policy_result.declared else "Sensitive filesystem read"
+                )
+            ),
+            ast=self._ast_for(fs=True, sandbox_escape=escape, secret_in_content=bool(secret_labels)),
+            extra_risk={"sandbox_escape_attempt": escape, "secret_labels": secret_labels},
         )
+        if escape:
+            # AST06: never actually touch a real path outside this lab's own
+            # sandbox root, even if a human approved it -- same fail-safe
+            # pattern execute_shell already uses for undeclared commands.
+            return "(sandbox) refused to read — path resolves outside this lab's own sandbox root"
         real_path = self.sandbox.resolve(path)
         if not real_path.exists():
             raise FileNotFoundError(f"(sandbox) {path} not found at {real_path}")
@@ -180,15 +449,19 @@ class RuntimeGateway:
     def write_file(self, path: str, content: str, *, parent_event: str | None = None) -> None:
         parent = parent_event or self.invoke_event_id
         policy_result = self.policy.evaluate_fs_write(path)
+        escape = self.sandbox.escapes_root(path)
         self._enforce(
             event_type=EventType.FS_WRITE,
             resource=path,
             policy_result=policy_result,
             parent_event=parent,
             action_label="filesystem.write",
-            title="Filesystem write outside declared capability",
-            ast=self._ast_for(fs=True),
+            title="Sandbox escape attempt" if escape else "Filesystem write outside declared capability",
+            ast=self._ast_for(fs=True, sandbox_escape=escape),
+            extra_risk={"sandbox_escape_attempt": escape},
         )
+        if escape:
+            return  # AST06: never actually write outside this lab's own sandbox root
         real_path = self.sandbox.resolve(path)
         real_path.parent.mkdir(parents=True, exist_ok=True)
         real_path.write_text(content, encoding="utf-8")
@@ -268,6 +541,8 @@ class RuntimeGateway:
             self.correlation.observe(instr_event)
             self._external_instruction_active = True
             self._external_instruction_event_id = instr_event.event_id
+            if detect_hidden_unicode_payload(content):
+                self._hidden_unicode_payload_active = True
             return content, instr_event
         return content, fetch_event
 
@@ -357,12 +632,13 @@ class RuntimeGateway:
             working_directory_access=self._looks_like_workspace(resource),
             previously_approved_exact_action=session_prior_approval,
             behavior_changed_after_update=behavior_changed_after_update,
+            hidden_unicode_payload=self._hidden_unicode_payload_active,
         )
         risk_kwargs.update(extra_risk or {})
         assessment = self.risk.assess(**risk_kwargs)
 
         if not assessment.requires_human_gate:
-            event.decision = DecisionState.ALLOWED
+            self.bus.update_decision(event.event_id, DecisionState.ALLOWED)
             return _Grant(event)
 
         finding = self._build_finding(
@@ -382,7 +658,7 @@ class RuntimeGateway:
             finding.status = "observed_only"
             finding.human_decision = "n/a (observe mode)"
             self.findings.append(finding)
-            event.decision = DecisionState.ALLOWED
+            self.bus.update_decision(event.event_id, DecisionState.ALLOWED)
             return _Grant(event)
 
         provenance = ProvenanceGraph(self.bus.events_for_session(self.session_id))
@@ -437,13 +713,15 @@ class RuntimeGateway:
                 finding.status = "approved (policy created)"
 
         if decision.grants_execution:
-            event.decision = (
-                DecisionState.APPROVED_ONCE if decision.decision == DecisionType.APPROVE_ONCE else DecisionState.ALLOWED
+            self.bus.update_decision(
+                event.event_id,
+                DecisionState.APPROVED_ONCE if decision.decision == DecisionType.APPROVE_ONCE else DecisionState.ALLOWED,
             )
             return _Grant(event)
 
-        event.decision = (
-            DecisionState.QUARANTINED if decision.decision == DecisionType.QUARANTINE_SKILL else DecisionState.REJECTED
+        self.bus.update_decision(
+            event.event_id,
+            DecisionState.QUARANTINED if decision.decision == DecisionType.QUARANTINE_SKILL else DecisionState.REJECTED,
         )
         self._publish(
             EventType.TOOL_DENIED,
@@ -482,14 +760,30 @@ class RuntimeGateway:
     def _looks_like_workspace(self, resource: str) -> bool:
         return resource.startswith("./") or resource.startswith("${workspace}")
 
-    def _ast_for(self, *, fs: bool = False, network: bool = False, metadata_mismatch: bool = False) -> list[str]:
+    def _ast_for(
+        self,
+        *,
+        fs: bool = False,
+        network: bool = False,
+        metadata_mismatch: bool = False,
+        sandbox_escape: bool = False,
+        secret_in_content: bool = False,
+    ) -> list[str]:
         # AST01 (malicious/sensitive) and AST02 (post-update behavior delta)
         # are layered on in _enforce/_build_finding; this seeds the
         # over-privileged-capability tag every gated action carries, plus
-        # AST04 when the manifest made a specific promise the runtime broke.
+        # AST04 when the manifest made a specific promise the runtime broke,
+        # AST06 when the resolved path escapes this skill's own sandbox
+        # root entirely, and AST01 again (credential exposure) when a live
+        # secret pattern was found in the content itself, independent of
+        # whether the path alone looked sensitive.
         tags = ["AST03"]
         if metadata_mismatch:
             tags.append("AST04")
+        if sandbox_escape:
+            tags.append("AST06")
+        if secret_in_content:
+            tags.append("AST01")
         return tags
 
     def _allowed_by_manifest(self, manifest: CapabilityManifest, event_type: EventType, resource: str) -> bool:

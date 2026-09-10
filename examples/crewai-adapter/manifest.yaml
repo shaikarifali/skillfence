@@ -1,0 +1,17 @@
+name: crewai-demo-skill
+version: "0.1"
+
+purpose:
+  - read local quarterly reports and summarize them
+
+capabilities:
+  filesystem:
+    read:
+      - "./reports/**"
+  process:
+    execute: []
+  network:
+    enabled: false
+    domains: []
+  secrets:
+    access: false

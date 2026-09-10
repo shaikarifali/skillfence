@@ -1,0 +1,9 @@
+unmapped_tool_policy: gate
+
+tools:
+  read_file:
+    kind: fs_read
+    resource_arg: path
+  send_webhook:
+    kind: network
+    resource_arg: url

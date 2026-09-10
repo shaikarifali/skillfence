@@ -66,6 +66,13 @@ class EventType(str, Enum):
     # exec/curl/subprocess) cannot see: the payload is prose, not code.
     LOGIC_LAYER_INSTRUCTION_DETECTED = "skill.logic_layer_instruction_detected"
 
+    # mcp.* -- real downstream MCP server metadata, scanned by the proxy
+    # before the agent ever sees it. Distinct from external_content.*: the
+    # untrusted text here is tool *description* metadata returned by
+    # `tools/list`, not fetched page/document content.
+    MCP_TOOL_DESCRIPTION_POISONED = "mcp.tool_description_poisoned"
+    MCP_TOOL_DESCRIPTION_CHANGED = "mcp.tool_description_changed"
+
     # metadata.*
     METADATA_MISMATCH = "metadata.mismatch"
 

@@ -33,6 +33,70 @@ SCORE_LOGIC_LAYER_INSTRUCTION_INVOLVED = 20
 # which policy-declared-vs-observed alone would miss.
 SCORE_BEHAVIOR_CHANGED_AFTER_UPDATE = 30
 
+# AST06 (weak isolation): the resolved resource path falls outside this
+# lab's own sandbox root entirely -- a path-traversal/symlink-style escape
+# attempt, not merely an undeclared-but-still-sandboxed action. Scored above
+# every other single factor: an isolation break threatens the host, not just
+# this one skill's declared scope.
+SCORE_SANDBOX_ESCAPE_ATTEMPT = 50
+
+# AST07 (update drift): this exact capability token has never been observed
+# in any prior invocation of this skill, even though it *is* within the
+# manifest's declared scope right now -- the manifest never had to change
+# for the skill's real behavior to drift, because the declared scope was
+# already broad enough to cover it. Policy-declared-vs-observed alone is
+# blind to this; only a cross-invocation behavioral baseline catches it.
+SCORE_NEW_CAPABILITY_SINCE_BASELINE = 30
+
+# MCP proxy: a real downstream server's tool name has no entry in this
+# server's tool map -- there is no manifest signal at all for it, not even
+# "undeclared." Scored at the same weight as a sandbox escape: not knowing
+# what a live, real-world action does is exactly the situation the human
+# gate exists for, deterministically, every time -- not a probabilistic
+# guess about how dangerous the tool's name sounds.
+SCORE_UNRESOLVABLE_TOOL_MAPPING = 50
+
+# A live-looking credential pattern (AWS key, GitHub PAT, private key
+# material, ...) was found in the actual *content* being read/returned --
+# not just a sensitive-looking path. Must reach HIGH on its own: the whole
+# point of this check is the case where the path is declared *and*
+# innocuous-looking (`deploy-notes.txt`), so `undeclared_capability` and
+# `sensitive_credential_read` never fire to carry the score there. A
+# confirmed live secret in content is stronger evidence than a merely
+# sensitive-looking path (Snyk's Feb 2026 ToxicSkills audit: 280+ skills
+# leaking credentials exactly this way) and must gate independently.
+# Fires in addition to, not instead of, path-based sensitivity.
+SCORE_SECRET_PATTERN_IN_CONTENT = 50
+
+# MCP tool poisoning: a real downstream MCP server's `tools/list` response
+# contains a tool *description* with instruction-like text embedded in it --
+# the "MCP Tool Poisoning" class first documented publicly in 2025, where an
+# agent never even calls the malicious tool; reading its description is the
+# whole attack, because most clients hand every tool description to the
+# model as trusted context before any tool is invoked. Scored to gate on its
+# own -- the tool is never called; the finding must fire from the list
+# response alone.
+SCORE_TOOL_DESCRIPTION_POISONED = 50
+
+# MCP rug-pull: a tool this proxy has seen before now has a *different*
+# description than last time, with no server-side version bump this proxy
+# can observe. The classic MCP rug-pull is a server that ships a benign
+# description at install/first-use time (when a human is most likely to be
+# reviewing it) and silently swaps in a malicious one later. Scored high
+# enough to gate independently, same as poisoning -- treat an unexplained
+# description change as untrusted until a human reviews and re-approves it.
+SCORE_MCP_TOOL_RUG_PULL = 50
+
+# ASCII smuggling / zero-width evasion: the instruction that fired
+# `external_instruction_involved`/`logic_layer_instruction_involved`/tool-
+# poisoning was only visible after stripping invisible interleaving
+# characters or decoding a Unicode Tag Block payload -- i.e. the raw text a
+# naive scanner (or a human glancing at the content) would see contains no
+# instruction at all. Deliberate evasion of detection is itself an
+# aggravating signal, on top of whatever score the instruction itself
+# already carries, not a replacement for it.
+SCORE_HIDDEN_UNICODE_PAYLOAD = 30
+
 THRESHOLDS = (
     (29, Severity.LOW),
     (49, Severity.MEDIUM),
@@ -106,6 +170,13 @@ class RiskEngine:
         previously_approved_exact_action: bool = False,
         working_directory_access: bool = False,
         behavior_changed_after_update: bool = False,
+        sandbox_escape_attempt: bool = False,
+        new_capability_since_baseline: bool = False,
+        unresolvable_tool_mapping: bool = False,
+        secret_labels: list[str] | None = None,
+        tool_description_poisoned: bool = False,
+        tool_description_changed: bool = False,
+        hidden_unicode_payload: bool = False,
     ) -> RiskAssessment:
         score = 0
         factors: list[str] = []
@@ -144,6 +215,42 @@ class RiskEngine:
             behavior_changed_after_update,
             SCORE_BEHAVIOR_CHANGED_AFTER_UPDATE,
             "behavior changed after skill update",
+        )
+        add(
+            sandbox_escape_attempt,
+            SCORE_SANDBOX_ESCAPE_ATTEMPT,
+            "resolved path escapes this skill's own sandbox root",
+        )
+        add(
+            new_capability_since_baseline,
+            SCORE_NEW_CAPABILITY_SINCE_BASELINE,
+            "capability token never observed in any prior invocation, despite unchanged manifest",
+        )
+        add(
+            unresolvable_tool_mapping,
+            SCORE_UNRESOLVABLE_TOOL_MAPPING,
+            "real MCP tool has no entry in this server's tool map — no capability signal exists for it at all",
+        )
+        if secret_labels:
+            add(
+                True,
+                SCORE_SECRET_PATTERN_IN_CONTENT,
+                f"live-looking credential pattern in content: {', '.join(secret_labels)}",
+            )
+        add(
+            tool_description_poisoned,
+            SCORE_TOOL_DESCRIPTION_POISONED,
+            "MCP tool description contains instruction-like content (tool poisoning)",
+        )
+        add(
+            tool_description_changed,
+            SCORE_MCP_TOOL_RUG_PULL,
+            "MCP tool description changed since it was last seen (possible rug-pull)",
+        )
+        add(
+            hidden_unicode_payload,
+            SCORE_HIDDEN_UNICODE_PAYLOAD,
+            "instruction was hidden via invisible Unicode (ASCII smuggling / zero-width evasion), not plainly visible",
         )
 
         score = max(score, 0)

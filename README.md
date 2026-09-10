@@ -212,8 +212,41 @@ skillfence findings ../DVAS/AST05/external-doc-injection    # explainable findin
 skillfence report ../DVAS/AST05/external-doc-injection       # full rollup: skill / risk / AST / findings / decision
 skillfence report ../DVAS/AST05/external-doc-injection --json
 skillfence report ../DVAS/AST05/external-doc-injection --markdown
+skillfence report ../DVAS/AST05/external-doc-injection --sarif > results.sarif   # for github/codeql-action/upload-sarif
 skillfence replay ../DVAS/AST05/external-doc-injection/.runs/<session>.events.jsonl   # replay a recorded session's event timeline
+skillfence profile ../DVAS/AST01/credential-reader            # one consolidated declared/observed/drift/history view — see below
 ```
+
+### Web dashboard
+
+```bash
+skillfence dashboard ../DVAS/AST01/credential-reader   # one lab
+skillfence dashboard .skillfence/mcp                   # an MCP proxy audit dir
+skillfence dashboard . --port 9000 --no-browser
+```
+A local, read-only page over the same evidence every command above reads —
+no new storage, no database. Session list (skill, highest severity, finding
+count) on the left; select one for its findings table (severity, AST tags,
+why-flagged, Capability Drift Score bar), its provenance chain rendered as
+a collapsible tree (built client-side from `parent_event` links — no
+graph library, no external request of any kind), and its raw event log.
+Re-scans the filesystem on every browser refresh (with an unchanged-file
+cache so an idle poll costs near nothing) and auto-refreshes every few
+seconds, so leaving it open during a live `run`/`mcp-proxy` session shows
+new events land in real time. Bound to `127.0.0.1` only — never reachable
+from another machine.
+
+### Sign and verify evidence (tamper-evident audit trail)
+
+```bash
+skillfence audit keygen                              # once — generates a local Ed25519 keypair
+skillfence audit sign ../DVAS/AST01/credential-reader/.runs/findings.jsonl
+skillfence audit verify ../DVAS/AST01/credential-reader/.runs/findings.jsonl   # only needs the *public* key
+```
+Signs any evidence file's current bytes with your private key, writing a
+`<file>.sig.json` sidecar. Hand a reviewer your public key and the evidence
+bundle; `verify` tells them whether it's exactly what you signed, without
+either side ever needing to trust the other's word for it.
 
 ### Benchmark everything
 
@@ -243,6 +276,45 @@ skillfence policy revoke grant-abc123def456
 `policy allow` pre-creates the same narrowly-scoped grant an interactive
 `[s] Allow scoped` decision would — useful for a security lead clearing a
 known false positive for the whole org ahead of time.
+
+### Protect a real MCP server, live
+
+```bash
+skillfence mcp-proxy --manifest server-manifest.yaml --tool-map tool-map.yaml -- node real-server.js
+```
+See [MCP Proxy](#mcp-proxy--protect-a-real-mcp-server-live) below for the full explanation and
+[`examples/mcp-proxy/`](examples/mcp-proxy/) for a complete worked example.
+
+### Telemetry correlation — catch an agent bypassing every wrapped tool
+
+Every command above intercepts at the agent-tool boundary (Layer A). An
+agent with a real shell/code-exec tool can act entirely outside that
+boundary — nothing wraps a raw `subprocess.run()` a skill decides to call
+directly. `skillfence telemetry correlate` doesn't try to catch that live;
+it attributes an *existing* Linux `auditd` feed back to a session
+after the fact, so what auditd saw and SkillFence didn't becomes visible:
+
+```bash
+# once, as root: tell auditd what to watch
+auditctl -a always,exit -F arch=b64 -S execve,execveat -k skillfence
+auditctl -a always,exit -F arch=b64 -S open,openat -k skillfence
+
+# after a session, correlate its event log against that window's audit trail
+skillfence telemetry correlate DVAS/AST01/credential-reader/.runs/<session>.events.jsonl /var/log/audit/audit.log --pid 4821
+# or stream it directly:
+ausearch -k skillfence --format raw | skillfence telemetry correlate <session>.events.jsonl -
+```
+
+Deliberately *not* a bespoke syscall monitor — Falco/Tetragon/osquery/
+auditd already do OS-level tracing far better than a from-scratch effort
+would. The differentiated part is attribution: pairing an OS-level record
+back to the SkillFence session/skill/decision that produced it (or didn't).
+Matching is name/path-suffix based (auditd's real absolute paths against
+SkillFence's requested-path strings), so this is reported as a separate,
+lower-confidence class of evidence — `TelemetryFinding`, not `Finding` —
+never fed through `RiskEngine`/`HumanGate` as if it carried the same
+certainty as the rest of the engine. Linux-only, x86_64 syscall numbers
+only, needs root to configure the audit rules; see Limitations.
 
 ### Smoke test (no lab required)
 
@@ -327,32 +399,224 @@ Its own `README.md` walks through editing it into your real skill, and
 shows exactly how to add a step that goes outside the declared manifest so
 you can watch SkillFence catch it.
 
-**What this isn't (yet):** wiring SkillFence's `RuntimeGateway` directly
-into a live agent (Claude Code, an MCP server, your own agent loop) so it
-enforces on real tool calls as they happen, rather than a scripted
-simulation. The gateway and its wrapper methods
-(`skillfence/runtime/gateway.py`) are the actual enforcement point and are
-what a real integration would call — see `skillfence/lab_runner.py::run_lab`
-for exactly how it's wired up today — but there's no packaged adapter for
-a specific agent framework yet. That's listed under **Roadmap** below.
+**Want SkillFence enforcing on a real, live agent instead of a scripted
+simulation?** See **Real agent integrations** below — both wire
+`RuntimeGateway` directly into real tool calls, no simulation involved.
+
+## Real agent integrations
+
+### MCP Proxy — protect a real MCP server, live
+
+`examples/my-first-skill/` and the labs above all run a *scripted*
+simulation through the gateway. The MCP proxy is the other end of the same
+gateway, wired to something real: to a real MCP client (Claude Code, or
+any MCP-speaking agent), the proxy *is* the MCP server; to the real
+downstream MCP server, the proxy *is* the client. Every `tools/call`
+passing through gets authorized by the exact same
+policy/risk/correlation/human-gate pipeline the labs use
+(`RuntimeGateway.authorize()`, `skillfence/runtime/gateway.py`) before the
+real request is ever forwarded — everything else (`initialize`,
+`tools/list`, `resources/*`, notifications) passes through unmodified.
+
+```bash
+skillfence mcp-proxy \
+  --manifest server-manifest.yaml \
+  --tool-map tool-map.yaml \
+  -- node real-server.js
+```
+
+Point your MCP client at that command instead of at `real-server.js`
+directly, and every tool call now passes through SkillFence first.
+
+Two config files, both small:
+- `server-manifest.yaml` — the same `CapabilityManifest` schema every lab
+  already uses (`filesystem.read`, `network.domains`, `process.execute`,
+  `secrets.access`) — what this server's tools are allowed to touch.
+- `tool-map.yaml` — a real server's tool names are arbitrary strings
+  (`read_file`, `fs.read`, `get_file_contents`, ...) that nothing in the
+  MCP spec can interpret, so this is the one thing a human has to declare
+  once per server: which tool names map to which SkillFence action kind
+  (`fs_read`/`fs_write`/`process_exec`/`network`/`secret`) and which
+  JSON-RPC argument holds the resource to evaluate. A tool with no entry
+  fails closed by default (`unmapped_tool_policy: gate`) — no mapping
+  means no capability signal at all, which is exactly the situation the
+  human gate exists for.
+
+**Important — this fails safe by design, not by accident.** The proxy's
+own stdin is entirely consumed by the MCP message stream, so there is no
+free interactive terminal for a human to answer a live decision prompt on
+the same channel. SkillFence's existing "no TTY -> fail-safe deny" behavior
+therefore does exactly the right thing here automatically: any action
+serious enough to need a human decision is blocked, not silently allowed,
+every time the proxy runs (which is always, in real deployment — a piped
+subprocess is never a TTY). Pre-authorize expected actions ahead of time,
+and review anything that got blocked afterward:
+
+```bash
+skillfence policy allow my-server filesystem.read "~/.aws/credentials" --reason "reviewed"
+skillfence findings .skillfence/mcp/<session-id>.findings.jsonl
+```
+
+Full worked example, including a tiny fixture "real" server so you can try
+this with nothing else installed: [`examples/mcp-proxy/`](examples/mcp-proxy/).
+
+**Beyond `tools/call` authorization, the proxy also scans both directions
+of a real server's traffic, before any of it reaches the agent or the
+client:**
+- **MCP tool poisoning** — every `tools/list` response's tool
+  *descriptions* are scanned for embedded instruction-like text before
+  they're relayed. Most MCP clients hand every tool description to the
+  model as trusted context before any tool is ever called, so a
+  malicious description is itself the attack — reading it is enough,
+  independent of whether the tool is ever invoked. A flagged description
+  is redacted in place (`[REDACTED BY SKILLFENCE...]`); every other tool
+  in the same response is relayed untouched, so one bad tool doesn't take
+  the whole session down.
+- **MCP rug-pull detection** — tool descriptions are fingerprinted
+  (hashed, never stored raw) across proxy runs against the same server. A
+  tool that silently changes its description between sessions, with
+  nothing on the wire explaining the change, is flagged and redacted the
+  same way — the classic MCP rug-pull ships a benign description at
+  review time and swaps in a malicious one later.
+- **ASCII smuggling / zero-width evasion** — both of the above (and every
+  other instruction-content check in the codebase) scan a normalized view
+  of the text: invisible interleaving characters (zero-width space, word
+  joiner, BOM) stripped, and any payload hidden via the deprecated Unicode
+  Tag block (U+E0000–U+E007F, the "ASCII smuggling" technique — fully
+  invisible in every terminal/editor/chat UI, documented against real LLM
+  products) decoded and scanned too. ZWJ/ZWNJ are deliberately left alone
+  (legitimate in emoji sequences and several real scripts), and a
+  benign flag-emoji tag sequence decodes to a meaningless ISO code, not an
+  instruction — so this stays at zero false positives.
+- **Bidirectional secret-in-content scanning** — a real tool call's
+  *response* is scanned for live-looking credential patterns (AWS/GitHub/
+  Slack/Stripe keys, private key material, JWTs, ...) the same way
+  `read_file()` already scans lab filesystem reads, correlated to its
+  request by JSON-RPC id. A plainly-named, harmless-sounding tool can
+  still hand back a live credential pasted into its response text — this
+  catches it before the client ever sees it, redacting the whole content
+  block rather than trying to elide just the secret (the detector
+  deliberately never returns match positions or values, only which
+  pattern fired).
+
+### LangChain adapter — protect real LangChain tools, live
+
+LangChain tools run as regular Python function calls inside your own
+process, not over a protocol — there's no proxy process to sit in front of
+them. Instead, `skillfence.adapters.langchain_adapter.build_handler()`
+returns a real `BaseCallbackHandler` you pass straight into
+`tool.run(callbacks=[handler])` or an `AgentExecutor`, authorizing every
+real tool call through the same `RuntimeGateway` before it runs:
+
+```bash
+pip install 'skillfence[langchain]'
+```
+```python
+from skillfence.adapters.langchain_adapter import build_handler
+handler = build_handler(gateway, tool_map)  # same ToolMap format as the MCP proxy
+agent_executor = AgentExecutor(agent=agent, tools=tools, callbacks=[handler])
+```
+
+This needed one thing verified against `langchain-core`'s actual source
+before shipping it, not assumed: `handle_event()` silently swallows a
+callback handler's exception unless that handler sets `raise_error =
+True` (default `False`) — without it, a "blocked" call would be logged
+and then run anyway. `build_handler()` sets this for you;
+`tests/test_langchain_adapter.py` proves end-to-end that a blocked tool's
+real function body never executes (via a side-effect counter, not just
+"an exception happened somewhere"). Full worked example:
+[`examples/langchain-adapter/`](examples/langchain-adapter/).
+
+### CrewAI adapter — protect real CrewAI tools, live
+
+```bash
+pip install 'skillfence[crewai]'
+```
+```python
+from skillfence.adapters.crewai_adapter import wrap_tool
+read_file = wrap_tool(ReadFileTool(), gateway, tool_map)  # same ToolMap format as the others
+agent = Agent(role="researcher", tools=[read_file], ...)
+```
+
+Built differently from the LangChain adapter, on purpose, because the two
+frameworks actually work differently. CrewAI *does* have an event bus
+(`crewai_event_bus`), but verifying it against real `crewai` source turned
+up a real problem: the emit that fires before a tool call is
+fire-and-forget — sync handlers run in a `ThreadPoolExecutor` the caller
+never awaits, so a handler raising an exception there has zero effect on
+whether the real tool call proceeds. A LangChain-style callback adapter
+would silently do nothing here. What actually executes a real tool
+synchronously, every time, is `CrewStructuredTool.invoke()` calling
+`self.func(...)` — and CrewAI sets that `func` to nothing more than the
+tool's own `_run` method. So `wrap_tool()` wraps `func` directly instead
+of hooking the event bus. `tests/test_crewai_adapter.py` proves this two
+ways: calling the wrapped tool directly, and dispatching through
+`crewai.tools.tool_usage.ToolUsage` — the actual class a live Crew's
+agent executor uses to route a tool call by name. Full worked example:
+[`examples/crewai-adapter/`](examples/crewai-adapter/).
+
+### Google ADK adapter — protect real ADK tools, live
+
+```bash
+pip install 'skillfence[adk]'
+```
+```python
+from skillfence.adapters.adk_adapter import build_before_tool_callback
+callback = build_before_tool_callback(gateway, tool_map)  # same ToolMap format as the others
+agent = LlmAgent(name=..., model=..., before_tool_callback=callback, tools=[...])
+```
+
+Shaped differently again, and for the same reason: verifying against real
+`google-adk` 2.8.0 source turned up a genuinely different mechanism than
+either other framework offers. `_run_with_trace()`
+(`google/adk/flows/llm_flows/functions.py`) runs every callback in
+`agent.canonical_before_tool_callbacks` in order; the first one to return
+a non-`None` dict short-circuits the real call (`__call_tool_async`, the
+only thing that ever calls `tool.run_async()`) entirely, and that dict
+becomes the tool's response. ADK's own `BeforeToolCallback` type is
+declared as `Callable[[BaseTool, dict, ToolContext], Optional[dict[str,
+Any]]]` — returning a dict *is* the documented way to block a call, not a
+side effect of an exception the framework might or might not respect. So
+this adapter needs neither LangChain's `raise_error = True` footgun nor
+CrewAI's reach-past-the-event-bus workaround: it returns `None` to allow,
+an error dict to block, exactly matching ADK's own contract.
+`tests/test_adk_adapter.py` proves it by driving the real
+`agent.canonical_before_tool_callbacks` and the real
+`FunctionTool.run_async()` — the underlying function genuinely never runs
+when blocked, checked via a side-effect log. Full worked example:
+[`examples/adk-adapter/`](examples/adk-adapter/).
 
 ## Detection model
 
 Deterministic, not an LLM. See `skillfence/risk/engine.py`:
 
 ```
-Sensitive credential read          +40
-Undeclared capability              +20
-Network egress                     +20
-Unknown destination                +10
-External instruction involved      +20
-Logic-layer instruction involved   +20
-Previously approved exact action   -20
-Working-directory access           -20
-Behavior changed after update      +30
+Sensitive credential read                +40
+Undeclared capability                    +20
+Network egress                           +20
+Unknown destination                      +10
+External instruction involved            +20
+Logic-layer instruction involved         +20
+Previously approved exact action         -20
+Working-directory access                 -20
+Behavior changed after update            +30
+Sandbox escape attempt                   +50
+New capability since baseline            +30
+Unresolvable MCP tool mapping            +50
 
 0-29 LOW · 30-49 MEDIUM · 50-69 HIGH · 70+ CRITICAL
 ```
+
+The last three are newer, real-world-facing factors: a **sandbox escape
+attempt** is a path that resolves outside a lab's own sandbox root (or, via
+the MCP proxy, outside anywhere sensible) — scored above everything else,
+since an isolation break threatens more than just this one skill's declared
+scope. **New capability since baseline** fires when an action is *within*
+declared scope but has never been observed in any prior run of this
+skill — catching a manifest that's broad enough to cover a capability drift
+that never needed a version bump. **Unresolvable MCP tool mapping** is
+MCP-proxy-only: a real tool call with no entry in that server's tool map has
+no capability signal at all, which always routes to the human gate.
 
 Every finding also carries a **Capability Drift Score (CDS)** — the same
 score normalized to 0.0-1.0, with an ALLOW/WARN/GATE/BLOCK band
@@ -444,32 +708,107 @@ Also runnable as a regression suite: `python3 -m pytest tests/` (these
 tests skip automatically if a DVAS clone isn't found — see
 `tests/test_labs.py` for how to point them at one).
 
+### Adversarial/evasion benchmark corpus
+
+A second, larger benchmark ships inside this repo (not DVAS) — generated,
+not committed, so there's nothing to keep in sync:
+
+```bash
+python3 scripts/build_adversarial_corpus.py
+skillfence bench benchmarks/adversarial
+```
+
+DVAS's 15/2 proves the basic AST01–05 detectors work. This corpus
+specifically stress-tests the *evasion-resistance* of the detectors built
+after that — 12 malicious labs (ASCII smuggling / Unicode Tag block
+encoding, zero-width character interleaving, live secrets pasted into
+plainly declared and unremarkable-looking files, sandbox-escape via deep
+traversal and via a smuggled absolute path, and two multi-step chains
+combining several of these) plus 5 benign near-neighbours per new
+detector — a legitimate regional flag emoji, ZWJ-heavy emoji sequences,
+prose that merely mentions "password," a too-short placeholder value, and
+a clean baseline — so scaling up malicious coverage never turns the
+benchmark into "detects everything," which would prove nothing:
+
+```
+Detection rate: 12/12 malicious labs flagged
+False-positive rate: 0/5 benign labs incorrectly flagged
+```
+
+Also runnable as a regression suite (`tests/test_adversarial_corpus.py`,
+skips gracefully if the corpus hasn't been generated) — CI generates it
+before every run, so it's always exercised there.
+
+## CI / GitHub Action
+
+A reusable composite Action (`action.yml`, at this repo's root) lets any
+repo that ships an Agentic Skill gate its PRs on SkillFence:
+
+```yaml
+- uses: shaikarifali/skillfence@main
+  with:
+    path: ./my-skill
+    mode: run                 # or "inspect" for a fast static-only check
+    decision: reject           # non-interactive — CI has no human to prompt
+    fail-on-findings: "true"   # fail the check if SkillFence recorded anything
+    upload-sarif: "true"       # surface results in GitHub's Security tab too
+```
+
+Full worked example, including the `permissions:` block `upload-sarif`
+needs: [`examples/github-action/consumer-workflow-example.yml`](examples/github-action/consumer-workflow-example.yml).
+
+This repo's own CI (`.github/workflows/tests.yml`) runs the full test
+suite plus `skillfence bench` against a fresh DVAS clone on every push —
+the 15/15 · 0/2 numbers above are enforced, not just claimed.
+
 ## Limitations
 
-- **Single adapter.** Only the bundled deterministic `ReferenceAgent` is
-  supported — there is no Claude Code / Codex / Cursor adapter yet. The
-  `AgentAdapter` interface (`skillfence/adapters/base.py`) exists so one
-  can be added without touching the policy/risk/correlation core.
-- **Layer A interception only.** SkillFence wraps tool calls at the
-  agent-tool boundary. It cannot yet detect an agent bypassing
-  instrumented tools entirely (would need OS-level telemetry — eBPF/
-  auditd/seccomp — see Roadmap).
+- **MCP, LangChain, CrewAI, and Google ADK are the real-world integrations
+  so far.** Between them that covers MCP-speaking agents (Claude Code
+  included), LangChain/LangGraph-based agents, CrewAI crews, and ADK
+  agents — but anything else with its own tool-calling convention still
+  needs its own adapter. The `AgentAdapter` interface
+  (`skillfence/adapters/base.py`) and `RuntimeGateway.authorize()`'s
+  decide/don't-perform-I/O split exist so one can be added without
+  touching the policy/risk/correlation core — all four existing adapters
+  are worked examples of exactly that pattern, and each of the three
+  frameworks needed a genuinely different interception strategy once its
+  actual source was checked rather than assumed (a raise-based callback
+  for LangChain, wrapping the real function directly for CrewAI, a
+  return-value-override callback for ADK) — see the adapter sections
+  above.
+- **Layer A interception is the primary control; `telemetry correlate` is
+  a secondary, heuristic one, not a peer.** SkillFence wraps tool calls at
+  the agent-tool boundary — that's where the deterministic, real-time
+  block-before-it-happens guarantee lives. `skillfence telemetry
+  correlate` (see below) can retroactively surface OS-level activity that
+  bypassed every wrapped tool call entirely, by attributing an existing
+  `auditd` feed back to a session, but it's after-the-fact, name/path-
+  suffix matching (not exact), Linux-only, and needs auditd rules already
+  configured with root. It's a lead worth review, not a block. Its parser
+  is built and tested against the documented, decade-stable auditd log
+  format, not against a live feed — the sandbox this was written in has
+  no kernel audit subsystem available (no systemd, WSL2) to verify
+  against directly. The syscall-number table it uses is x86_64-only.
 - **Instruction detection is a deterministic pattern match**, not a model
   judgment — by design (the LLM is never the security engine, and the
   core must work with no LLM available at all). It will miss instructions
   phrased outside its patterns; that is expected at this stage.
-- **No dashboard.** Sessions/findings/decisions are all JSONL, browsable via
-  `skillfence findings`/`report`/`policy list` — no web UI yet.
+- **`skillfence dashboard` re-scans the filesystem on every refresh, no
+  index.** Fine for one lab or one MCP audit dir; a "whole fleet" root
+  with hundreds of accumulated sessions is a full walk every time and
+  will feel it, especially over a slow filesystem mount.
 - **AST02 detection is single-update-deep.** It compares against the
   manifest immediately before the most recent `skill.update` step, not a
   full version history / dependency graph.
 
 ## Roadmap
 
-- A real agent adapter (Claude Code / MCP) alongside the reference agent
-- Web dashboard (sessions, findings, provenance graph, capability drift)
-- OS-level telemetry (eBPF/auditd) as a second interception layer
-- A larger benchmark corpus with adversarial/evasion labs
+- Publish to PyPI (`pip install skillfence`) — the sdist/wheel build
+  (`python3 -m build`) and `twine check` both pass; the account-side
+  `twine upload` step is the only thing left
+- Network SOCKADDR parsing for `telemetry correlate` (currently reports a
+  `connect` syscall as observed but doesn't decode the remote address)
 - AST06–AST10 coverage where runtime evidence is the right signal
 
 ## License
