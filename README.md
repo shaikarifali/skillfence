@@ -31,6 +31,12 @@ actions for a human to approve, reject, scope, or quarantine before they
 execute. Enforcement is deterministic: there is no LLM anywhere in the
 security-decision path.
 
+Protecting a real MCP server adds one more thing beyond instrumenting
+agent-caused actions: the [MCP proxy](#mcp-proxy--protect-a-real-mcp-server-live)
+also passively scans content a real server sends *before* the agent ever
+acts on it — tool descriptions (poisoning, rug-pull) and tool responses
+(live secrets) — independent of whether any tool call happens at all.
+
 ## Why runtime?
 
 Static analysis cannot observe behavior that only emerges during execution —
