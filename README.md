@@ -116,40 +116,40 @@ in the first place (see **Security Model**).
 
 ## Architecture
 
-See [docs/architecture.md](docs/architecture.md) for rendered diagrams
-(enforcement flow, provenance chain) and the module map.
+See [docs/architecture.md](docs/architecture.md) for the module map.
 
-```
-User Prompt -> Agent + Agentic Skill
-                    |
-                    v
-          SkillFence Runtime Gateway      (skillfence/runtime/gateway.py)
-   tool wrappers: read/write/exec/fetch/network_send
-                    |
-                    v
-           Normalized Event Bus            (skillfence/events/)
-                    |
-      +-------------+-------------+
-      v             v             v
-  Policy Engine  Correlation   (both feed)
-  (declared vs   Engine        Risk Engine
-   requested)    (attack       (deterministic
-                  chains)       scoring)
-      +-------------+-------------+
-                    |
-                    v
-     LOW/MEDIUM -> allow + log
-     HIGH/CRITICAL -> Human Decision Gate (CLI)
-                    |
-        approve / reject / scope / quarantine
-                    |
-                    v
-          Finding + Audit Log (JSONL)
-```
+Every real action — from any of the five entry points below — funnels
+through one enforcement point (`RuntimeGateway._enforce`): normalize into
+an `Event`, run it through the policy/risk/correlation engines, then
+either allow-and-log or pause for a human. A rejection genuinely blocks
+execution; the real file/process/network/tool call never happens.
 
-Every wrapped tool call funnels through one enforcement point
-(`RuntimeGateway._enforce`): normalize -> publish -> correlate -> score ->
-allow, or pause for a human and genuinely block execution on reject.
+```mermaid
+flowchart LR
+    subgraph entry["Real entry points"]
+        direction TB
+        mcp["MCP Proxy<br/>tools/call"]
+        lc["LangChain<br/>callback"]
+        ca["CrewAI<br/>wrapped func"]
+        adk["Google ADK<br/>callback"]
+        lab["Lab / your skill<br/>script.yaml simulation"]
+    end
+
+    entry --> gw["Runtime Gateway<br/>normalize into Event"]
+    gw --> engines["Policy + Risk + Correlation<br/>declared-vs-observed · deterministic score · attack chains"]
+    engines --> triage{"Severity"}
+
+    triage -->|LOW / MEDIUM| allow["Allow + log"]
+    triage -->|HIGH / CRITICAL| gate["Human Decision Gate<br/>CLI — fails safe if no TTY"]
+
+    gate --> decision{"Decision"}
+    decision -->|approve once / allow scoped| exec["Real action executes"]
+    decision -->|reject / quarantine| block["Blocked — never executes"]
+
+    allow --> audit["Finding + Audit Log<br/>JSONL, signable, dashboard-viewable"]
+    exec --> audit
+    block --> audit
+```
 
 ## Full command reference
 
