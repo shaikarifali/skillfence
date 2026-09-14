@@ -30,7 +30,13 @@ SCORE_LOGIC_LAYER_INSTRUCTION_INVOLVED = 20
 # declared/reachable after a skill update, exercised shortly after that
 # update. This fires even when the (possibly compromised) new manifest
 # "declares" it -- the signal is the behavior *delta* across the update,
-# which policy-declared-vs-observed alone would miss.
+# which policy-declared-vs-observed alone would miss. Also doubles as
+# AST10 (cross-platform reuse) when the update that introduced the
+# capability was itself a platform migration rather than an ordinary
+# version bump -- same detection, same score, relabeled (see
+# RuntimeGateway._platform_migration) since the root cause a reviewer
+# should suspect differs: a compromised update pipeline vs. a porting
+# tool that quietly widened a narrow declaration.
 SCORE_BEHAVIOR_CHANGED_AFTER_UPDATE = 30
 
 # AST06 (weak isolation): the resolved resource path falls outside this
@@ -170,6 +176,7 @@ class RiskEngine:
         previously_approved_exact_action: bool = False,
         working_directory_access: bool = False,
         behavior_changed_after_update: bool = False,
+        platform_migration_involved: bool = False,
         sandbox_escape_attempt: bool = False,
         new_capability_since_baseline: bool = False,
         unresolvable_tool_mapping: bool = False,
@@ -214,7 +221,9 @@ class RiskEngine:
         add(
             behavior_changed_after_update,
             SCORE_BEHAVIOR_CHANGED_AFTER_UPDATE,
-            "behavior changed after skill update",
+            "behavior changed after platform migration (cross-platform reuse)"
+            if platform_migration_involved
+            else "behavior changed after skill update",
         )
         add(
             sandbox_escape_attempt,

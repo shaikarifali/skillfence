@@ -22,6 +22,7 @@ currently covering:
 - **AST05 — Untrusted External Instructions**
 - **AST06 — Weak Isolation** (sandbox/path-traversal escape detection)
 - **AST07 — Update Drift** (MCP tool description rug-pull detection)
+- **AST10 — Cross-Platform Reuse** (capability widening during a platform migration)
 
 It is not another `SKILL.md` scanner. It instruments what a skill actually
 causes an agent to do — filesystem, process, network, and external-content
@@ -95,6 +96,12 @@ skill.load -> skill.invoke -> external_content.fetch
 ## Installation
 
 Requires Python 3.10+.
+
+```bash
+pip install skillfence
+```
+
+### From source (editable, for development)
 
 ```bash
 python3 -m pip install --user -e .
@@ -696,7 +703,17 @@ a real server's `tools/list` response before the agent ever sees it, not
 from anything the agent did. **Instruction hidden via invisible Unicode**
 is an aggravating factor layered on top of whichever instruction-detection
 factor it accompanies (not a replacement for it) — deliberate evasion is
-itself evidence of intent.
+itself evidence of intent. **Behavior changed after update** also covers
+**AST10 (Cross-Platform Reuse)**: same detection (a capability declared
+now that was absent from the skill's true original manifest,
+`RuntimeGateway._manifest_history[0]`), same score — the only difference
+is *why* the manifest changed. Tagging an `update` step in a `script.yaml`
+with `platform_migration: true` marks it as a cross-platform port rather
+than an ordinary version bump, which changes a later drift finding's tag
+from AST02 to AST10 and the human-facing explanation from "treat this as
+a supply-chain signal" to "an automated porting tool likely widened this
+declaration to make the port work" — because those point a reviewer at a
+different root cause.
 
 Every finding also carries a **Capability Drift Score (CDS)** — the same
 score normalized to 0.0-1.0, with an ALLOW/WARN/GATE/BLOCK band
@@ -895,12 +912,9 @@ the 15/15 · 0/2 numbers above are enforced, not just claimed.
 
 ## Roadmap
 
-- Publish to PyPI (`pip install skillfence`) — the sdist/wheel build
-  (`python3 -m build`) and `twine check` both pass; the account-side
-  `twine upload` step is the only thing left
-- AST08–AST10 coverage (Poor Scanning, No Governance, Cross-Platform
-  Reuse) where runtime evidence is the right signal — AST06 (Weak
-  Isolation) and AST07 (Update Drift) are already covered, see above
+- AST08–AST09 coverage (Poor Scanning, No Governance) where runtime
+  evidence is the right signal — AST06 (Weak Isolation), AST07 (Update
+  Drift), and AST10 (Cross-Platform Reuse) are already covered, see above
 
 ## Changelog
 

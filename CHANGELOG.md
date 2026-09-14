@@ -3,7 +3,18 @@
 All notable changes to SkillFence are documented here. Loosely follows
 [Keep a Changelog](https://keepachangelog.com/) — newest first.
 
-## [0.4.0] — Unreleased
+## [Unreleased]
+
+### Added
+- **AST10 (Cross-Platform Reuse) coverage** — reuses the AST02
+  baseline-drift detection (a capability declared now that was absent
+  from a skill's true original manifest); tagging an `update` step with
+  `platform_migration: true` marks the update as a cross-platform port
+  rather than an ordinary version bump, which changes a later drift
+  finding's tag from AST02 to AST10 and its human-facing explanation to
+  name porting-tool capability widening as the likely cause.
+
+## [0.4.0] — 2026-09-14
 
 ### Fixed
 - **AST02 (capability drift) now compares against a skill's true original
@@ -22,6 +33,10 @@ All notable changes to SkillFence are documented here. Loosely follows
   profile. SkillFence stays a policy *compiler*; a real kernel LSM does
   the actual real-time enforcement, closing the gap `telemetry correlate`
   leaves as retroactive-only.
+- **`auditd` SOCKADDR decoding** — `skillfence telemetry correlate` now
+  decodes a `connect()` syscall's real destination (IPv4/IPv6/AF_UNIX)
+  from its `SOCKADDR` audit record instead of only reporting that a
+  connection happened.
 
 ## [0.3.0] — 2026-09-10
 

@@ -120,6 +120,21 @@ class RuntimeGateway:
         # happened in between.
         self._manifest_history: list[CapabilityManifest] = []
         self._post_update = False
+        # AST10 (cross-platform reuse): set once any `apply_update()` in
+        # this session was itself a platform migration (a skill ported
+        # from one agent framework/OS to another), not an ordinary version
+        # bump. Reuses the exact same baseline-drift detection AST02 uses
+        # -- the *evidence shape* is identical (a capability declared now
+        # that wasn't in the original manifest) -- the only thing that
+        # differs is *why* the manifest changed, which changes which OWASP
+        # category the finding belongs under and what a human reviewer
+        # should suspect: a compromised update process (AST02) vs. an
+        # automated porting tool that silently widened a narrow
+        # declaration to make the port "just work" on the new platform
+        # (AST10). Session-sticky like the other evasion/context flags
+        # above, for the same reason `_post_update` doesn't try to track
+        # which specific update introduced which capability.
+        self._platform_migration = False
 
     # -- lifecycle --------------------------------------------------------
 
@@ -167,7 +182,12 @@ class RuntimeGateway:
         return self._logic_layer_injected_step, self._logic_layer_instruction_event_id
 
     def apply_update(
-        self, to_version: str, new_manifest_path: Path, *, parent_event: str | None = None
+        self,
+        to_version: str,
+        new_manifest_path: Path,
+        *,
+        parent_event: str | None = None,
+        platform_migration: bool = False,
     ) -> None:
         """Skill update/dependency-change event (AST02). Swaps the active
         manifest and appends the outgoing one to `_manifest_history`, so
@@ -175,6 +195,13 @@ class RuntimeGateway:
         skill's original manifest" from "newly declared by some update
         along the way" -- across any number of updates, not just the most
         recent one.
+
+        `platform_migration=True` (AST10) marks this specific update as a
+        cross-platform port rather than an ordinary version bump -- e.g. a
+        skill carried from one agent framework/OS to another by an
+        automated porting tool. Same manifest-swap mechanics either way;
+        it only changes which OWASP category a later drift finding gets
+        tagged under (see `_platform_migration`).
         """
         parent = parent_event or self.invoke_event_id
         new_manifest = CapabilityManifest.load(new_manifest_path, workspace=self.sandbox.root)
@@ -184,12 +211,18 @@ class RuntimeGateway:
             sensitive=False,
             declared=True,
             parent_event=parent,
-            details={"from_version": self.manifest.version, "to_version": to_version},
+            details={
+                "from_version": self.manifest.version,
+                "to_version": to_version,
+                "platform_migration": platform_migration,
+            },
         )
         self._manifest_history.append(self.manifest)
         self.manifest = new_manifest
         self.policy = PolicyEngine(new_manifest)
         self._post_update = True
+        if platform_migration:
+            self._platform_migration = True
 
     # -- wrapped tool calls -------------------------------------------------
 
@@ -637,7 +670,10 @@ class RuntimeGateway:
             and not self._allowed_by_manifest(self._manifest_history[0], event_type, resource)
         )
         if behavior_changed_after_update:
-            ast = sorted(set(ast) | {"AST02"})
+            # AST10 instead of AST02 when the manifest that introduced this
+            # capability arrived via a platform migration, not an ordinary
+            # update -- same detection, different root cause to flag.
+            ast = sorted(set(ast) | ({"AST10"} if self._platform_migration else {"AST02"}))
         if self._logic_layer_instruction_active:
             # LPCI: the malicious payload lives in the
             # skill's own natural-language definition, not fetched content
@@ -653,6 +689,7 @@ class RuntimeGateway:
             working_directory_access=self._looks_like_workspace(resource),
             previously_approved_exact_action=session_prior_approval,
             behavior_changed_after_update=behavior_changed_after_update,
+            platform_migration_involved=self._platform_migration,
             hidden_unicode_payload=self._hidden_unicode_payload_active,
         )
         risk_kwargs.update(extra_risk or {})
@@ -790,8 +827,10 @@ class RuntimeGateway:
         sandbox_escape: bool = False,
         secret_in_content: bool = False,
     ) -> list[str]:
-        # AST01 (malicious/sensitive) and AST02 (post-update behavior delta)
-        # are layered on in _enforce/_build_finding; this seeds the
+        # AST01 (malicious/sensitive) and AST02/AST10 (post-update behavior
+        # delta -- AST10 instead of AST02 specifically when the triggering
+        # update was a platform migration) are layered on in
+        # _enforce/_build_finding; this seeds the
         # over-privileged-capability tag every gated action carries, plus
         # AST04 when the manifest made a specific promise the runtime broke,
         # AST06 when the resolved path escapes this skill's own sandbox
@@ -889,11 +928,20 @@ class RuntimeGateway:
                 "directive — a logic-layer injection a code-pattern scanner would not see."
             )
         if behavior_changed_after_update:
-            lines.append(
-                "This capability was declared only as of the most recent skill update — it was absent from the "
-                "manifest immediately beforehand. Treat post-update behavior changes as a supply-chain signal, "
-                "not as safe merely because the new manifest now declares it."
-            )
+            if self._platform_migration:
+                lines.append(
+                    "This capability was declared only after the skill was migrated to a new platform — it "
+                    "was absent from the manifest before the port. Automated porting tools frequently widen a "
+                    "narrow declaration (a scoped domain allowlist, a specific filesystem glob) to make the "
+                    "ported skill 'just work' on the new host. Treat a capability that only appeared during "
+                    "migration as untrusted until reviewed, the same as any other post-update behavior change."
+                )
+            else:
+                lines.append(
+                    "This capability was declared only as of the most recent skill update — it was absent from the "
+                    "manifest immediately beforehand. Treat post-update behavior changes as a supply-chain signal, "
+                    "not as safe merely because the new manifest now declares it."
+                )
         lines.append(f"Recommended action: {request.recommended_action.upper()}.")
         return "\n".join(lines)
 

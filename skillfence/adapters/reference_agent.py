@@ -147,7 +147,15 @@ class ReferenceAgent:
 
         if action == "update":
             manifest_path = self._script_dir / "skill" / step["manifest"]
-            self.gateway.apply_update(step["version"], manifest_path, parent_event=parent_event)
+            # `platform_migration: true` on the step (AST10) marks this
+            # update as a cross-platform port rather than an ordinary
+            # version bump -- see RuntimeGateway.apply_update().
+            self.gateway.apply_update(
+                step["version"],
+                manifest_path,
+                parent_event=parent_event,
+                platform_migration=step.get("platform_migration", False),
+            )
             self._provenance.append(f"update:{step['version']}")
             return None
 

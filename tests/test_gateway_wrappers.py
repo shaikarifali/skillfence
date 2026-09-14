@@ -265,3 +265,61 @@ def test_capability_declared_since_the_original_manifest_is_never_flagged_as_dri
     gateway.apply_update("3", v3)
 
     gateway.authorize(kind="fs_read", resource="./logs/app.log")  # declared since v1 -- must not raise
+
+
+# -- AST10: cross-platform reuse -- same baseline-drift detection as AST02, --
+# -- tagged differently when the update that introduced the capability was --
+# -- itself a platform migration rather than an ordinary version bump      --
+
+
+def test_capability_widened_by_a_platform_migration_is_tagged_ast10_not_ast02(tmp_path: Path):
+    gateway = _make_gateway(tmp_path, decision="reject")  # v1: no ~/.aws/credentials access
+    v2 = _write_manifest_variant(tmp_path, "manifest_v2.yaml", version="2", extra_read="~/.aws/credentials")
+    gateway.apply_update("2", v2, platform_migration=True)
+
+    with pytest.raises(ActionBlocked) as excinfo:
+        gateway.authorize(kind="fs_read", resource="~/.aws/credentials")
+    finding = excinfo.value.finding
+    assert "AST10" in finding.ast
+    assert "AST02" not in finding.ast
+    assert any("platform migration" in reason for reason in finding.why_flagged)
+
+
+def test_ordinary_update_without_platform_migration_flag_still_tags_ast02(tmp_path: Path):
+    gateway = _make_gateway(tmp_path, decision="reject")
+    v2 = _write_manifest_variant(tmp_path, "manifest_v2.yaml", version="2", extra_read="~/.aws/credentials")
+    gateway.apply_update("2", v2)  # platform_migration defaults to False
+
+    with pytest.raises(ActionBlocked) as excinfo:
+        gateway.authorize(kind="fs_read", resource="~/.aws/credentials")
+    finding = excinfo.value.finding
+    assert "AST02" in finding.ast
+    assert "AST10" not in finding.ast
+
+
+def test_platform_migration_flag_is_sticky_across_a_later_ordinary_update(tmp_path: Path):
+    """Mirrors the AST02 multi-update gap test: the migration can be the
+    *first* of several updates, with the capability only actually touched
+    after a later, unrelated update -- the AST10 tag must still stick,
+    since the true baseline comparison (v1) is what catches the drift, not
+    which specific update in the chain is checked.
+    """
+    gateway = _make_gateway(tmp_path, decision="reject")  # v1: no ~/.ssh/id_rsa access
+
+    v2 = _write_manifest_variant(tmp_path, "manifest_v2.yaml", version="2", extra_read="~/.ssh/id_rsa")
+    gateway.apply_update("2", v2, platform_migration=True)  # the port
+
+    v3 = _write_manifest_variant(tmp_path, "manifest_v3.yaml", version="3", extra_read="~/.ssh/id_rsa")
+    gateway.apply_update("3", v3)  # unrelated later version bump, not a migration
+
+    with pytest.raises(ActionBlocked) as excinfo:
+        gateway.authorize(kind="fs_read", resource="~/.ssh/id_rsa")
+    assert "AST10" in excinfo.value.finding.ast
+
+
+def test_platform_migration_never_flags_a_capability_declared_since_the_original_manifest(tmp_path: Path):
+    gateway = _make_gateway(tmp_path, decision="reject")  # v1 declares ./logs/**
+    v2 = _write_manifest_variant(tmp_path, "manifest_v2.yaml", version="2", extra_read=None)
+    gateway.apply_update("2", v2, platform_migration=True)
+
+    gateway.authorize(kind="fs_read", resource="./logs/app.log")  # declared since v1 -- must not raise
