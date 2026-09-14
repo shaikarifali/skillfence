@@ -5,6 +5,12 @@
 
 **Runtime behavioral security for Agentic Skills.**
 
+<p align="center">
+  <a href="https://pypi.org/project/skillfence/"><img src="https://img.shields.io/pypi/v/skillfence" alt="PyPI"></a>
+  <a href="https://pypi.org/project/skillfence/"><img src="https://img.shields.io/pypi/pyversions/skillfence" alt="Python versions"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/pypi/l/skillfence" alt="License"></a>
+</p>
+
 > Do not scan what the skill says. Trace what the skill causes.
 > Do not drown the human in alerts. Interrupt only at meaningful security boundaries.
 > Do not let the model make the final consequential decision. Give the human evidence and let the human authorize the action.
