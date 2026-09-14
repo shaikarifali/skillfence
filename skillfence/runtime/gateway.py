@@ -876,6 +876,20 @@ class RuntimeGateway:
             ast_tags.add("AST01")
         if self._external_instruction_active:
             ast_tags.add("AST05")
+        # AST08 (Poor Scanning): this skill's own manifest claims it already
+        # passed a static scan/review, and a runtime finding fired anyway --
+        # the exact case that proves a declared scan attestation is never a
+        # substitute for runtime enforcement. Not a risk factor (it doesn't
+        # make the action itself more dangerous) -- purely evidentiary, same
+        # as AST01/AST05 above.
+        if self.manifest.security.scanned:
+            reasons = [
+                *reasons,
+                "skill manifest declares a prior security scan"
+                + (f" ({self.manifest.security.scan_tool})" if self.manifest.security.scan_tool else "")
+                + " — runtime detection still found this",
+            ]
+            ast_tags.add("AST08")
 
         evidence_ids = [e.event_id for e in self.bus.events_for_session(self.session_id)[-8:]]
         chains = self.correlation.session(self.session_id).chains
@@ -926,6 +940,13 @@ class RuntimeGateway:
             lines.append(
                 "The skill's own definition (not fetched content, not code) contains an instruction-like "
                 "directive — a logic-layer injection a code-pattern scanner would not see."
+            )
+        if self.manifest.security.scanned:
+            scan_tool = f" by {self.manifest.security.scan_tool}" if self.manifest.security.scan_tool else ""
+            lines.append(
+                f"This skill's manifest declares it already passed a security scan{scan_tool} — that "
+                "attestation is not being trusted here; a scan attestation is never a substitute for "
+                "runtime enforcement, and this finding is the proof."
             )
         if behavior_changed_after_update:
             if self._platform_migration:

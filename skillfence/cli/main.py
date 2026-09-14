@@ -34,6 +34,7 @@ Quick start — the pre-built labs:
   skillfence bench                                       # score every lab against its known-correct answer
   skillfence learn                                       # guided menu — pick a lab, see its mission, run it
   skillfence policy list                                 # see every remembered approval (org-wide)
+  skillfence inventory DVAS                              # fleet-wide governance report (never-reviewed skills, ungoverned grants)
 
 Quick start — checking YOUR OWN skill:
   skillfence inspect path/to/your-skill                  # static check, needs only skill/manifest.yaml
@@ -244,6 +245,12 @@ def inspect(
         f"  network:          {'enabled -> ' + str(manifest.capabilities.network.domains) if manifest.capabilities.network.enabled else 'disabled'}"
     )
     console.print(f"  secrets.access:   {manifest.capabilities.secrets.access}")
+    if manifest.security.scanned:
+        tool = f" (tool: {manifest.security.scan_tool})" if manifest.security.scan_tool else ""
+        console.print(
+            f"\n[yellow]declared security.scanned: true{tool}[/yellow] — a self-declared claim, "
+            "not verified here; SkillFence never trusts it as a substitute for runtime findings."
+        )
     skill_md = lab / "skill" / "SKILL.md"
     if skill_md.exists():
         console.print("\n[dim]SKILL.md (first lines):[/dim]")
@@ -253,6 +260,59 @@ def inspect(
         "\n[dim]This is the declared side only — run `skillfence observe` or "
         "`skillfence run` to see what the skill actually does.[/dim]"
     )
+
+
+@app.command(
+    epilog="Examples:\n  skillfence inventory DVAS\n  skillfence inventory fleet/ --all\n"
+)
+def inventory(
+    root: Path = typer.Argument(
+        ..., help="Directory containing one or more skills (each with skill/manifest.yaml) to audit fleet-wide."
+    ),
+    show_all: bool = typer.Option(
+        False, "--all", help="Also list skills with no governance issues (hidden by default)."
+    ),
+):
+    """Fleet-wide governance inventory (AST09 — No Governance): every
+    skill under `root` that has a manifest but has never actually been
+    reviewed (`run`/`observe`/`protect`/MCP proxy — zero sessions found
+    anywhere), and every active policy grant that isn't backed by any
+    review at or after it was issued. Read-only — this is a report, not
+    an enforcement point; nothing here blocks anything."""
+    from skillfence.governance.inventory import build_inventory
+
+    rows = build_inventory(root)
+    if not rows:
+        console.print(f"[yellow]No skill/manifest.yaml found under {root}[/yellow]")
+        raise typer.Exit(0)
+
+    flagged = [r for r in rows if not r.clean]
+    to_show = rows if show_all else flagged
+
+    if not to_show:
+        console.print(f"[green]No governance gaps found across {len(rows)} skill(s) under {root}.[/green]")
+        return
+
+    table = Table(title=f"Governance Inventory (AST09) — {root}")
+    table.add_column("Skill")
+    table.add_column("Reviewed")
+    table.add_column("Highest severity seen")
+    table.add_column("Active grants")
+    table.add_column("Flags")
+    for r in to_show:
+        table.add_row(
+            r.skill,
+            f"{r.session_count} run(s)" if r.ever_reviewed else "[red]never[/red]",
+            r.highest_severity,
+            str(r.active_grants),
+            ", ".join(r.flags) if r.flags else "[green]clean[/green]",
+        )
+    console.print(table)
+    console.print(f"\n{len(flagged)}/{len(rows)} skill(s) flagged with a governance gap.")
+    if not show_all and len(rows) > len(flagged):
+        console.print(
+            f"[dim]{len(rows) - len(flagged)} skill(s) with no governance issues hidden — pass --all to show them.[/dim]"
+        )
 
 
 @app.command(epilog="Examples:\n  skillfence observe DVAS/AST05/external-doc-injection\n")

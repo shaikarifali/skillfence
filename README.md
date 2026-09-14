@@ -22,7 +22,11 @@ currently covering:
 - **AST05 — Untrusted External Instructions**
 - **AST06 — Weak Isolation** (sandbox/path-traversal escape detection)
 - **AST07 — Update Drift** (MCP tool description rug-pull detection)
+- **AST08 — Poor Scanning** (a runtime finding contradicting a skill's own "already scanned" claim)
+- **AST09 — No Governance** (fleet-wide inventory of never-reviewed skills and ungoverned grants)
 - **AST10 — Cross-Platform Reuse** (capability widening during a platform migration)
+
+Full [OWASP Agentic Skills Top 10](https://owasp.org/www-project-agentic-skills-top-10/) coverage.
 
 It is not another `SKILL.md` scanner. It instruments what a skill actually
 causes an agent to do — filesystem, process, network, and external-content
@@ -295,6 +299,21 @@ skillfence policy revoke grant-abc123def456
 `policy allow` pre-creates the same narrowly-scoped grant an interactive
 `[s] Allow scoped` decision would — useful for a security lead clearing a
 known false positive for the whole org ahead of time.
+
+### Governance inventory (AST09 — No Governance)
+
+```bash
+skillfence inventory ../DVAS              # only skills with a governance gap
+skillfence inventory ../DVAS --all        # every skill, including clean ones
+```
+Every other command above is about one skill's runtime behavior. This one
+is about the fleet: which skills under a root directory have a
+`skill/manifest.yaml` but have **never actually been reviewed** (zero
+`run`/`observe`/`protect`/MCP-proxy sessions found anywhere), and which
+still carry an **active policy grant not backed by any review at or after
+it was issued** — a standing elevated approval nobody's looked at since.
+Read-only, reuses the same session/findings JSONL and org-wide policy
+store every other command already reads — no new storage format.
 
 ### Protect a real MCP server, live
 
@@ -713,7 +732,16 @@ than an ordinary version bump, which changes a later drift finding's tag
 from AST02 to AST10 and the human-facing explanation from "treat this as
 a supply-chain signal" to "an automated porting tool likely widened this
 declaration to make the port work" — because those point a reviewer at a
-different root cause.
+different root cause. **AST08 (Poor Scanning)** is a third pure-tag case,
+alongside AST01/AST05 above: a skill's manifest can declare
+`security.scanned: true` (optionally `scan_tool: "..."`) — a self-declared
+claim that it already passed some external scan or review. SkillFence
+never trusts that claim any more than the rest of the manifest; it exists
+purely so a finding that fires anyway gets tagged AST08, which is the
+concrete evidence that a static/pre-deployment scan attestation is never
+a substitute for runtime enforcement. No new score factor — the
+underlying action already scored whatever made it gate in the first
+place.
 
 Every finding also carries a **Capability Drift Score (CDS)** — the same
 score normalized to 0.0-1.0, with an ALLOW/WARN/GATE/BLOCK band
@@ -912,9 +940,9 @@ the 15/15 · 0/2 numbers above are enforced, not just claimed.
 
 ## Roadmap
 
-- AST08–AST09 coverage (Poor Scanning, No Governance) where runtime
-  evidence is the right signal — AST06 (Weak Isolation), AST07 (Update
-  Drift), and AST10 (Cross-Platform Reuse) are already covered, see above
+Full OWASP Agentic Skills Top 10 coverage (AST01–AST10) is complete — see
+**What is SkillFence?** above. From here, further work is about depth
+within the existing categories (see **Limitations**), not new ones.
 
 ## Changelog
 

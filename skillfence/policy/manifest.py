@@ -40,11 +40,26 @@ class Capabilities(BaseModel):
     secrets: SecretCapabilities = Field(default_factory=SecretCapabilities)
 
 
+class SecurityAttestation(BaseModel):
+    """A skill's self-declared claim that it already passed some external
+    security scan/review (AST08 — Poor Scanning). SkillFence never trusts
+    this any more than it trusts the rest of the manifest -- it exists so
+    a runtime finding can be tagged AST08 specifically when it fires on a
+    skill that *claims* to already be clean, which is exactly the case
+    that proves a static/pre-deployment scan attestation is not a
+    substitute for runtime enforcement.
+    """
+
+    scanned: bool = False
+    scan_tool: str = ""
+
+
 class CapabilityManifest(BaseModel):
     name: str
     version: str = "0.1"
     purpose: list[str] = Field(default_factory=list)
     capabilities: Capabilities = Field(default_factory=Capabilities)
+    security: SecurityAttestation = Field(default_factory=SecurityAttestation)
 
     @classmethod
     def load(cls, path: Path, *, workspace: Optional[Path] = None) -> "CapabilityManifest":

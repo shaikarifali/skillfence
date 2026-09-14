@@ -323,3 +323,58 @@ def test_platform_migration_never_flags_a_capability_declared_since_the_original
     gateway.apply_update("2", v2, platform_migration=True)
 
     gateway.authorize(kind="fs_read", resource="./logs/app.log")  # declared since v1 -- must not raise
+
+
+# -- AST08: poor scanning -- a manifest that declares a prior security scan --
+# -- must not suppress a runtime finding, and the finding proves the point  --
+
+
+def _write_manifest_with_scan_attestation(tmp_path: Path, *, scan_tool: str = "") -> Path:
+    path = tmp_path / "manifest.yaml"
+    path.write_text(
+        "name: test-skill\nversion: \"0.1\"\npurpose: [test]\n"
+        "capabilities:\n  filesystem:\n    read: [\"${workspace}/logs/**\"]\n"
+        "  process:\n    execute: []\n  network:\n    enabled: false\n    domains: []\n"
+        "  secrets:\n    access: false\n"
+        f"security:\n  scanned: true\n  scan_tool: \"{scan_tool}\"\n",
+        encoding="utf-8",
+    )
+    return path
+
+
+def _make_gateway_with_scan_attestation(tmp_path: Path, *, scan_tool: str = "some-sast-tool") -> RuntimeGateway:
+    sandbox_root = tmp_path / "sandbox"
+    (sandbox_root / "logs").mkdir(parents=True)
+    manifest = CapabilityManifest.load(
+        _write_manifest_with_scan_attestation(tmp_path, scan_tool=scan_tool), workspace=sandbox_root
+    )
+    sandbox = Sandbox(root=sandbox_root)
+    human_gate = HumanGate(auto_decider=lambda _req: DecisionType("reject"))
+    bus = EventBus(tmp_path / "events.jsonl")
+    gateway = RuntimeGateway(
+        bus=bus,
+        manifest=manifest,
+        sandbox=sandbox,
+        human_gate=human_gate,
+        session_id="test-session",
+        agent="test-agent",
+        skill=manifest.name,
+    )
+    gateway.start()
+    return gateway
+
+
+def test_manifest_declaring_a_prior_scan_does_not_suppress_a_runtime_finding(tmp_path: Path):
+    gateway = _make_gateway_with_scan_attestation(tmp_path, scan_tool="acme-sast")
+    with pytest.raises(ActionBlocked) as excinfo:
+        gateway.authorize(kind="fs_read", resource="~/.aws/credentials")
+    finding = excinfo.value.finding
+    assert "AST08" in finding.ast
+    assert any("acme-sast" in reason for reason in finding.why_flagged)
+
+
+def test_manifest_without_scan_attestation_never_tagged_ast08(tmp_path: Path):
+    gateway = _make_gateway(tmp_path, decision="reject")  # default manifest, no security: block
+    with pytest.raises(ActionBlocked) as excinfo:
+        gateway.authorize(kind="fs_read", resource="~/.aws/credentials")
+    assert "AST08" not in excinfo.value.finding.ast

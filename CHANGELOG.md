@@ -6,6 +6,7 @@ All notable changes to SkillFence are documented here. Loosely follows
 ## [Unreleased]
 
 ### Added
+- **Full OWASP Agentic Skills Top 10 coverage (AST01–AST10).**
 - **AST10 (Cross-Platform Reuse) coverage** — reuses the AST02
   baseline-drift detection (a capability declared now that was absent
   from a skill's true original manifest); tagging an `update` step with
@@ -13,6 +14,17 @@ All notable changes to SkillFence are documented here. Loosely follows
   rather than an ordinary version bump, which changes a later drift
   finding's tag from AST02 to AST10 and its human-facing explanation to
   name porting-tool capability widening as the likely cause.
+- **AST08 (Poor Scanning) coverage** — a manifest can declare
+  `security.scanned: true` (optionally `scan_tool: "..."`), a
+  self-declared claim of a prior static scan/review. SkillFence never
+  trusts it; a runtime finding that fires anyway gets tagged AST08 —
+  concrete evidence that a scan attestation is not a substitute for
+  runtime enforcement.
+- **AST09 (No Governance) coverage** — `skillfence inventory <root>`: a
+  fleet-wide, read-only report of every skill under a root directory
+  that's never actually been reviewed (zero sessions found anywhere) and
+  every active policy grant not backed by any review at or after it was
+  issued.
 
 ## [0.4.0] — 2026-09-14
 
