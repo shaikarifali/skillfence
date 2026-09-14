@@ -867,6 +867,10 @@ def telemetry_correlate(
         console.print(f"  [bold red][{tf.confidence.upper()}][/bold red] {tf.reason}")
         console.print(f"    pid={ae.pid} comm={ae.comm} exe={ae.exe} paths={ae.paths or '-'}")
 
+    for ae in report.observed_network:
+        destination = ae.remote_address or "(remote address not decoded — no SOCKADDR record, or an unrecognized address family)"
+        console.print(f"  [dim][OBSERVED][/dim] pid={ae.pid} comm={ae.comm} -> {destination}")
+
     if report.bypass_suspected:
         console.print(
             "\n[bold red]Possible Layer-A bypass[/bold red]: OS-level activity with no corresponding "

@@ -310,6 +310,7 @@ after the fact, so what auditd saw and SkillFence didn't becomes visible:
 # once, as root: tell auditd what to watch
 auditctl -a always,exit -F arch=b64 -S execve,execveat -k skillfence
 auditctl -a always,exit -F arch=b64 -S open,openat -k skillfence
+auditctl -a always,exit -F arch=b64 -S connect -k skillfence
 
 # after a session, correlate its event log against that window's audit trail
 skillfence telemetry correlate DVAS/AST01/credential-reader/.runs/<session>.events.jsonl /var/log/audit/audit.log --pid 4821
@@ -325,8 +326,14 @@ Matching is name/path-suffix based (auditd's real absolute paths against
 SkillFence's requested-path strings), so this is reported as a separate,
 lower-confidence class of evidence — `TelemetryFinding`, not `Finding` —
 never fed through `RiskEngine`/`HumanGate` as if it carried the same
-certainty as the rest of the engine. Linux-only, x86_64 syscall numbers
-only, needs root to configure the audit rules; see Limitations.
+certainty as the rest of the engine. A `connect` syscall's real destination
+is decoded from the accompanying `SOCKADDR` record (IPv4/IPv6/AF_UNIX) and
+shown as `[OBSERVED] pid=... comm=... -> 203.0.113.5:443` — reported as
+observed, not matched/unmatched, since it's a raw `IP:port` and SkillFence's
+own network events record a requested domain/URL string; correlating one
+against the other would need a DNS lookup this module deliberately doesn't
+do. Linux-only, x86_64 syscall numbers only, needs root to configure the
+audit rules; see Limitations.
 
 ### Policy compiler — real, kernel-enforced confinement from the same manifest
 
@@ -891,8 +898,6 @@ the 15/15 · 0/2 numbers above are enforced, not just claimed.
 - Publish to PyPI (`pip install skillfence`) — the sdist/wheel build
   (`python3 -m build`) and `twine check` both pass; the account-side
   `twine upload` step is the only thing left
-- Network SOCKADDR parsing for `telemetry correlate` (currently reports a
-  `connect` syscall as observed but doesn't decode the remote address)
 - AST08–AST10 coverage (Poor Scanning, No Governance, Cross-Platform
   Reuse) where runtime evidence is the right signal — AST06 (Weak
   Isolation) and AST07 (Update Drift) are already covered, see above

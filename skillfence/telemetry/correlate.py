@@ -123,11 +123,17 @@ def correlate(
                     )
                 )
         elif ae.kind == "network_connect":
-            # Extracting the remote address needs the SOCKADDR record,
-            # which this module doesn't parse yet (hex-encoded sockaddr
-            # structs, address-family-dependent) -- reported as observed,
-            # not matched/unmatched, so it's visible without a false claim
-            # of having actually correlated it. See Roadmap.
+            # `ae.remote_address` is decoded from the SOCKADDR record when
+            # one was present (see auditd.parse_sockaddr) -- but it's still
+            # reported as *observed*, not matched/unmatched: it's a raw
+            # IP:port, and SkillFence's own network events record a
+            # requested domain/URL string, not a resolved address. Matching
+            # one against the other would need a DNS lookup this module
+            # deliberately doesn't do (a live network dependency inside a
+            # detector is exactly what this project's whole testing
+            # philosophy avoids) -- so this stays informational, now with
+            # the real destination visible instead of just "something
+            # connected."
             report.observed_network.append(ae)
 
     return report

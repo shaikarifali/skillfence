@@ -59,6 +59,64 @@ class AuditEvent:
     argv: list[str] | None = None
     success: bool | None = None
     key: str | None = None  # the `-k` tag on the audit rule that produced this, if any
+    remote_address: str | None = None  # decoded from a SOCKADDR record, if any -- see parse_sockaddr()
+
+
+# A `connect()` syscall's SYSCALL/PATH/EXECVE records are joined by a
+# `type=SOCKADDR msg=audit(...): saddr=<hex>` record carrying the raw
+# `struct sockaddr` the kernel saw, hex-encoded. Format (stable, widely
+# documented -- e.g. `man 7 ip`, `struct sockaddr_in`/`sockaddr_in6` in
+# <netinet/in.h>, and the many SOC/forensics writeups decoding this exact
+# field): 2 bytes address-family (host byte order, i.e. little-endian on
+# every architecture this matters for), then a family-specific body. Port
+# and address fields inside sockaddr_in/in6 are in *network* byte order
+# (big-endian) -- they were never touched by the host's own endianness,
+# unlike the family field, which the kernel writes as a native `sa_family_t`.
+_AF_INET = 2
+_AF_INET6 = 10  # Linux-specific; some other OSes use a different value
+_AF_UNIX = 1
+
+
+def _hex_to_bytes(hex_str: str) -> bytes | None:
+    try:
+        return bytes.fromhex(hex_str)
+    except ValueError:
+        return None
+
+
+def parse_sockaddr(hex_str: str) -> str | None:
+    """Decodes a `saddr=<hex>` value into `"host:port"` (IPv4/IPv6) or a
+    filesystem path (AF_UNIX). Returns `None` for an unparseable or
+    unrecognized-family value rather than raising -- a `connect()` this
+    can't decode should still show up as `kind="network_connect"` with
+    `remote_address=None`, not get dropped or crash the correlator.
+    """
+    raw = _hex_to_bytes(hex_str)
+    if raw is None or len(raw) < 2:
+        return None
+
+    family = int.from_bytes(raw[0:2], byteorder="little")
+
+    if family == _AF_INET and len(raw) >= 8:
+        port = int.from_bytes(raw[2:4], byteorder="big")
+        addr = ".".join(str(b) for b in raw[4:8])
+        return f"{addr}:{port}"
+
+    if family == _AF_INET6 and len(raw) >= 28:
+        port = int.from_bytes(raw[2:4], byteorder="big")
+        addr_bytes = raw[8:24]
+        addr = ":".join(f"{addr_bytes[i]:02x}{addr_bytes[i + 1]:02x}" for i in range(0, 16, 2))
+        return f"[{addr}]:{port}"
+
+    if family == _AF_UNIX and len(raw) > 2:
+        path_bytes = raw[2:].split(b"\x00", 1)[0]
+        try:
+            path = path_bytes.decode("utf-8")
+        except UnicodeDecodeError:
+            return None
+        return path if path else None
+
+    return None
 
 
 def _to_int(value: str | None) -> int | None:
@@ -131,6 +189,11 @@ def parse_audit_log(text: str) -> list[AuditEvent]:
             argc = _to_int(execve_fields.get("argc")) or 0
             argv = [execve_fields[f"a{i}"] for i in range(argc) if f"a{i}" in execve_fields]
 
+        remote_address: str | None = None
+        sockaddr_records = rec.get("SOCKADDR")
+        if sockaddr_records and "saddr" in sockaddr_records[0]:
+            remote_address = parse_sockaddr(sockaddr_records[0]["saddr"])
+
         events.append(
             AuditEvent(
                 audit_id=aid,
@@ -144,6 +207,7 @@ def parse_audit_log(text: str) -> list[AuditEvent]:
                 argv=argv,
                 success=(syscall_fields.get("success") == "yes") if "success" in syscall_fields else None,
                 key=syscall_fields.get("key"),
+                remote_address=remote_address,
             )
         )
     return events
