@@ -103,6 +103,18 @@ SCORE_MCP_TOOL_RUG_PULL = 50
 # already carries, not a replacement for it.
 SCORE_HIDDEN_UNICODE_PAYLOAD = 30
 
+# Progressive disclosure: no single fetch this session contained anything
+# instruction-like on its own -- each one, read alone, is exactly what a
+# per-fetch scanner is built to wave through. Only once this fetch's content
+# is considered *together with* everything already fetched earlier in the
+# same session does an instruction appear. The individual documents were
+# never the attack; the combination is. Scored the same as hidden-unicode
+# evasion -- deliberately splitting a payload across fetches to dodge a
+# single-document scan is the network equivalent of hiding it in invisible
+# characters, and stacks on top of whatever the assembled instruction itself
+# already scores.
+SCORE_PROGRESSIVE_DISCLOSURE = 30
+
 THRESHOLDS = (
     (29, Severity.LOW),
     (49, Severity.MEDIUM),
@@ -184,6 +196,7 @@ class RiskEngine:
         tool_description_poisoned: bool = False,
         tool_description_changed: bool = False,
         hidden_unicode_payload: bool = False,
+        progressive_disclosure_across_fetches: bool = False,
     ) -> RiskAssessment:
         score = 0
         factors: list[str] = []
@@ -260,6 +273,11 @@ class RiskEngine:
             hidden_unicode_payload,
             SCORE_HIDDEN_UNICODE_PAYLOAD,
             "instruction was hidden via invisible Unicode (ASCII smuggling / zero-width evasion), not plainly visible",
+        )
+        add(
+            progressive_disclosure_across_fetches,
+            SCORE_PROGRESSIVE_DISCLOSURE,
+            "instruction only emerges once combined with an earlier, individually benign fetch (progressive disclosure)",
         )
 
         score = max(score, 0)

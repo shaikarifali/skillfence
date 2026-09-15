@@ -17,6 +17,14 @@ All notable changes to SkillFence are documented here. Loosely follows
   current manifest's declared scope.
 
 ### Added
+- **Progressive-disclosure detection (AST05).** `fetch_url()` now keeps a
+  session-level history of every fetch's content and re-scans the
+  concatenation of everything fetched so far, in addition to the existing
+  single-fetch scan. Catches a directive deliberately split across two or
+  more individually-benign fetches — invisible to a scanner that only ever
+  looks at one document at a time — and tags it with a distinct
+  "progressive disclosure" risk factor separate from the base
+  external-instruction signal.
 - **`skillfence lab ui`** — a live local web UI over a lab suite: browse
   every discovered lab's declared capabilities, `SKILL.md`, and
   `README.md`, then run one through the real engine and see its real

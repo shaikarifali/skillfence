@@ -86,6 +86,14 @@ class RuntimeGateway:
         # extra "evasion was attempted" weight, not just the detection
         # event itself.
         self._hidden_unicode_payload_active = False
+        # Progressive disclosure (AST05): every document `fetch_url()` has
+        # returned in this session, in fetch order, kept purely so the next
+        # fetch's content can be scanned *together with* everything before
+        # it -- catching a payload deliberately split across two or more
+        # individually-benign fetches, which a per-fetch scan alone cannot
+        # see. Session-sticky, same reasoning as `_hidden_unicode_payload_active`.
+        self._fetched_content_history: list[str] = []
+        self._progressive_disclosure_active = False
         # MCP proxy only: tool names flagged by scan_mcp_tool_description()
         # this session -- a poisoned/rug-pulled description was already
         # blocked at tools/list time, but a call made with a description an
@@ -607,7 +615,46 @@ class RuntimeGateway:
             self._external_instruction_event_id = instr_event.event_id
             if detect_hidden_unicode_payload(content):
                 self._hidden_unicode_payload_active = True
+            self._fetched_content_history.append(content)
             return content, instr_event
+
+        # Progressive disclosure: this fetch alone is clean, but it may
+        # complete a payload split across it and one or more earlier fetches
+        # in this same session -- each individually benign, only visible
+        # once assembled. Only checked when there *is* prior history, so a
+        # skill's very first fetch can never trigger this on its own.
+        # Joined with no separator, matching how a naive agent assembles
+        # paginated content -- concatenated chunks, not distinct documents --
+        # which is also what lets a payload be split at an arbitrary byte
+        # offset rather than only at a word boundary.
+        if self._fetched_content_history:
+            combined = "".join([*self._fetched_content_history, content])
+            combined_instruction = detect_instruction(combined)
+            if combined_instruction:
+                instr_event = self._publish(
+                    EventType.EXTERNAL_CONTENT_INSTRUCTION_DETECTED,
+                    resource=url,
+                    sensitive=False,
+                    declared=False,
+                    parent_event=fetch_event.event_id,
+                    details={
+                        "matched": combined_instruction,
+                        "assembled_from_fetches": len(self._fetched_content_history) + 1,
+                    },
+                )
+                self.correlation.observe(instr_event)
+                self._external_instruction_active = True
+                self._external_instruction_event_id = instr_event.event_id
+                self._progressive_disclosure_active = True
+                self._fetched_content_history.append(content)
+                # The reference agent parses whatever this call returns for
+                # an injected next action -- hand back the assembled text
+                # (not just this fetch's own content) so the completed
+                # instruction actually resolves, the same way it would if a
+                # single fetch had contained the whole thing.
+                return combined, instr_event
+
+        self._fetched_content_history.append(content)
         return content, fetch_event
 
     def network_send(self, destination: str, payload_desc: str, *, parent_event: str | None = None) -> None:
@@ -726,6 +773,7 @@ class RuntimeGateway:
             platform_migration_involved=self._platform_migration,
             new_capability_since_baseline=new_capability_since_baseline,
             hidden_unicode_payload=self._hidden_unicode_payload_active,
+            progressive_disclosure_across_fetches=self._progressive_disclosure_active,
         )
         risk_kwargs.update(extra_risk or {})
         assessment = self.risk.assess(**risk_kwargs)
