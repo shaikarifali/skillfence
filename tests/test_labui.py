@@ -112,6 +112,28 @@ def test_run_lab_via_ui_returns_none_for_unrunnable_lab(tmp_path: Path):
     assert run_lab_via_ui(root, "AST01/no-script", decision="reject") is None
 
 
+def test_run_lab_via_ui_observe_mode_never_blocks_but_still_records_findings(tmp_path: Path):
+    # The whole point of the UI's Observe step: real evidence, before any
+    # decision is made -- so the finding must exist (something WOULD have
+    # gated) but its status must show it was never actually blocked.
+    root = _build_lab(tmp_path)
+    result = run_lab_via_ui(root, "AST01/demo-lab", decision="approve_once", mode="observe")
+    assert result is not None
+    assert result["mode"] == "observe"
+    assert len(result["findings"]) == 1
+    finding = result["findings"][0]
+    assert finding["status"] == "observed_only"
+    assert finding["human_decision"] == "n/a (observe mode)"
+
+
+def test_run_lab_via_ui_enforce_mode_actually_blocks(tmp_path: Path):
+    root = _build_lab(tmp_path)
+    result = run_lab_via_ui(root, "AST01/demo-lab", decision="reject", mode="enforce")
+    assert result is not None
+    assert result["mode"] == "enforce"
+    assert result["findings"][0]["status"] == "blocked"
+
+
 # -- live server --------------------------------------------------------
 
 
@@ -151,6 +173,23 @@ def test_live_server_run_endpoint_executes_for_real(live_server: str):
         result = json.loads(resp.read())
     assert result["invocation_number"] == 1
     assert len(result["findings"]) == 1
+
+
+def test_live_server_observe_mode_via_query_param(live_server: str):
+    req = urllib.request.Request(
+        live_server + "/api/lab/AST01/demo-lab/run?decision=approve_once&mode=observe", method="POST"
+    )
+    with urllib.request.urlopen(req, timeout=5) as resp:
+        result = json.loads(resp.read())
+    assert result["mode"] == "observe"
+    assert result["findings"][0]["status"] == "observed_only"
+
+
+def test_live_server_rejects_invalid_mode(live_server: str):
+    req = urllib.request.Request(live_server + "/api/lab/AST01/demo-lab/run?decision=reject&mode=bogus", method="POST")
+    with pytest.raises(urllib.error.HTTPError) as excinfo:
+        urllib.request.urlopen(req, timeout=5)
+    assert excinfo.value.code == 400
 
 
 def test_live_server_404_on_unknown_lab(live_server: str):

@@ -92,14 +92,23 @@ def lab_detail(root: Path, name: str) -> dict | None:
     }
 
 
-def run_lab_via_ui(root: Path, name: str, *, decision: str) -> dict | None:
-    """Runs the exact same `run_lab()` the CLI's `run`/`bench` call --
-    same engine, same policy store, same JSONL audit trail written to the
-    lab's own `.runs/` directory. Returns `None` if `name` isn't a real,
-    runnable (has a `script.yaml`) lab under `root`. Raises `ValueError`
-    if `decision` isn't a real `DecisionType` value -- the caller turns
-    that into an HTTP 400, same as a bad CLI `--decision` flag would exit
-    non-zero.
+def run_lab_via_ui(root: Path, name: str, *, decision: str, mode: str = "enforce") -> dict | None:
+    """Runs the exact same `run_lab()` the CLI's `run`/`bench`/`observe`
+    call -- same engine, same policy store, same JSONL audit trail written
+    to the lab's own `.runs/` directory. Returns `None` if `name` isn't a
+    real, runnable (has a `script.yaml`) lab under `root`. Raises
+    `ValueError` if `decision` isn't a real `DecisionType` value -- the
+    caller turns that into an HTTP 400, same as a bad CLI `--decision`
+    flag would exit non-zero.
+
+    `mode="observe"` (the UI's default -- see `templates.PAGE`'s two-step
+    Observe-then-Decide flow) never blocks and never actually asks the
+    human gate anything, but still runs every action for real and records
+    real findings -- exactly the evidence a reviewer needs *before*
+    picking a decision, rather than picking one blind. `decision` is
+    still required by `run_lab()`'s signature in this mode but is never
+    consulted (`RuntimeGateway._enforce` returns before ever calling
+    `human_gate.decide()` when `observe_mode` is set).
     """
     root = root.resolve()
     lab_dir = (root / name).resolve()
@@ -108,12 +117,13 @@ def run_lab_via_ui(root: Path, name: str, *, decision: str) -> dict | None:
     if not (lab_dir / "script.yaml").exists():
         return None
 
-    result = run_lab(lab_dir, decision=decision)
+    result = run_lab(lab_dir, decision=decision, mode=mode)
     steps = [{"action": r.step.get("action"), "status": r.status, "detail": r.detail} for r in result.report.results]
     findings = [{**f.model_dump(), "explain": f.explain()} for f in result.findings]
     return {
         "session_id": result.session_id,
         "invocation_number": result.invocation_number,
+        "mode": mode,
         "steps": steps,
         "findings": findings,
     }

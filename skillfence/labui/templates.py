@@ -407,7 +407,22 @@ async function selectLab(name) {
       </div>
 
       <div class="section">
-        <div class="section-title">Run</div>
+        <div class="section-title">1. Observe</div>
+        <p style="color:var(--ink-dim); font-size:13px; margin-bottom:12px;">Runs the skill for real and records every real action it takes —
+        nothing is blocked in this mode, so you see its true behavior before deciding anything.</p>
+        <div class="card">
+          <div class="run-bar">
+            <button class="run-btn" id="observe-btn" ${detail.runnable ? "" : "disabled"}>Observe</button>
+            <span id="observe-status"></span>
+          </div>
+        </div>
+        <div id="observe-result"></div>
+      </div>
+
+      <div class="section" id="decide-section" style="display:none;">
+        <div class="section-title">2. Decide</div>
+        <p style="color:var(--ink-dim); font-size:13px; margin-bottom:12px;">Based on what you just observed, choose how the human gate should
+        respond, then run it again with enforcement actually on.</p>
         <div class="card">
           <div class="run-bar">
             <label>Decision on gate</label>
@@ -418,11 +433,11 @@ async function selectLab(name) {
               <option value="allow_scoped">allow_scoped</option>
               <option value="quarantine_skill">quarantine_skill</option>
             </select>
-            <button class="run-btn" id="run-btn" ${detail.runnable ? "" : "disabled"}>Run</button>
-            <span id="run-status"></span>
+            <button class="run-btn" id="enforce-btn">Enforce</button>
+            <span id="enforce-status"></span>
           </div>
         </div>
-        <div id="run-result"></div>
+        <div id="enforce-result"></div>
       </div>
 
       ${renderSolution(detail)}
@@ -444,7 +459,10 @@ async function selectLab(name) {
     body.style.display = open ? "none" : "block";
     revealBtn.textContent = open ? "Show analysis & expected verdict" : "Hide analysis & expected verdict";
   };
-  if (detail.runnable) document.getElementById("run-btn").onclick = () => runLab(detail.name);
+  if (detail.runnable) {
+    document.getElementById("observe-btn").onclick = () => observeLab(detail.name);
+    document.getElementById("enforce-btn").onclick = () => enforceLab(detail.name);
+  }
 }
 
 function renderSteps(steps) {
@@ -477,15 +495,37 @@ function renderFindings(findings) {
     <div class="terminal"><div class="terminal-body">${explainBlocks}</div></div></div>`;
 }
 
-async function runLab(name) {
-  const btn = document.getElementById("run-btn"), status = document.getElementById("run-status");
+async function observeLab(name) {
+  const btn = document.getElementById("observe-btn"), status = document.getElementById("observe-status");
+  btn.disabled = true;
+  status.textContent = "observing…";
+  try {
+    // decision=approve_once is a required parameter but never consulted in
+    // observe mode -- the human gate is never actually asked anything here,
+    // see run_lab_via_ui()'s docstring. Same convention `skillfence observe`
+    // itself uses.
+    const url = `/api/lab/${name.split("/").map(encodeURIComponent).join("/")}/run?decision=approve_once&mode=observe`;
+    const result = await fetchJSON(url, {method: "POST"});
+    status.textContent = `invocation #${result.invocation_number} · observed`;
+    document.getElementById("observe-result").innerHTML = renderSteps(result.steps) + renderFindings(result.findings);
+    document.getElementById("decide-section").style.display = "block";
+  } catch (e) {
+    status.textContent = "error: " + e.message;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function enforceLab(name) {
+  const btn = document.getElementById("enforce-btn"), status = document.getElementById("enforce-status");
   const decision = document.getElementById("decision-select").value;
   btn.disabled = true;
-  status.textContent = "running…";
+  status.textContent = "enforcing…";
   try {
-    const result = await fetchJSON(`/api/lab/${name.split("/").map(encodeURIComponent).join("/")}/run?decision=${encodeURIComponent(decision)}`, {method: "POST"});
-    status.textContent = `invocation #${result.invocation_number}`;
-    document.getElementById("run-result").innerHTML = renderSteps(result.steps) + renderFindings(result.findings);
+    const url = `/api/lab/${name.split("/").map(encodeURIComponent).join("/")}/run?decision=${encodeURIComponent(decision)}&mode=enforce`;
+    const result = await fetchJSON(url, {method: "POST"});
+    status.textContent = `invocation #${result.invocation_number} · enforced`;
+    document.getElementById("enforce-result").innerHTML = renderSteps(result.steps) + renderFindings(result.findings);
   } catch (e) {
     status.textContent = "error: " + e.message;
   } finally {

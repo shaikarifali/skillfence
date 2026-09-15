@@ -80,8 +80,12 @@ def _make_handler(root: Path) -> type[BaseHTTPRequestHandler]:
                     return
                 query = urllib.parse.parse_qs(parsed.query)
                 decision = (query.get("decision") or ["reject"])[0]
+                mode = (query.get("mode") or ["enforce"])[0]
+                if mode not in ("enforce", "observe"):
+                    self._send_json({"error": f"invalid mode: {mode!r} (must be 'enforce' or 'observe')"}, status=400)
+                    return
                 try:
-                    result = run_lab_via_ui(root, name, decision=decision)
+                    result = run_lab_via_ui(root, name, decision=decision, mode=mode)
                 except ValueError:
                     self._send_json({"error": f"invalid decision: {decision!r}"}, status=400)
                     return
