@@ -15,6 +15,7 @@ from rich.console import Console
 from skillfence.adapters.reference_agent import ReferenceAgent, RunReport
 from skillfence.events.bus import EventBus
 from skillfence.findings.schema import Finding
+from skillfence.fingerprint.behavior import load_prior_tokens
 from skillfence.hitl.cli_gate import HumanGate
 from skillfence.hitl.decisions import DecisionType
 from skillfence.policy.manifest import CapabilityManifest
@@ -101,6 +102,11 @@ def run_lab(
     # malicious later. Demonstrates why one-time static validation isn't
     # enough even for runtime scanning done only once.
     invocation_number = len(list(runs_dir.glob("*.events.jsonl"))) + 1 if runs_dir.exists() else 1
+    # AST07 (update drift): this skill's true behavioral baseline, computed
+    # directly from every prior invocation's raw event log -- called before
+    # this run's own events file exists, so every file found here is
+    # genuinely a prior run. See `fingerprint.behavior.load_prior_tokens`.
+    known_capability_tokens = load_prior_tokens(runs_dir)
     events_path = runs_dir / f"{session_id}.events.jsonl"
 
     bus = EventBus(events_path)
@@ -128,6 +134,7 @@ def run_lab(
         observe_mode=(mode == "observe"),
         policy_store=policy_store,
         skill_definition_text=skill_definition_text,
+        known_capability_tokens=frozenset(known_capability_tokens),
     )
 
     agent = ReferenceAgent(gateway)

@@ -69,6 +69,30 @@ def _domain_of(resource: str | None) -> str | None:
     return None
 
 
+def token_for_event(event_type: str | None, resource: str | None, sensitive: bool) -> str | None:
+    """The single-event capability token `capability_tokens()` computes per
+    event -- extracted so live per-action gating
+    (`RuntimeGateway._enforce`'s AST07 cross-invocation check) and post-run
+    bulk diffing (`record_and_diff`) share exactly one definition of what a
+    "capability token" is, rather than two definitions that could drift
+    apart. Returns `None` for a non-capability event type (`skill.load`,
+    `human_decision.made`, ...) -- there is nothing to compare against a
+    baseline for those.
+    """
+    if not event_type or event_type in _NON_CAPABILITY_TYPES:
+        return None
+    if event_type in _FS_TYPES:
+        return f"{event_type}:sensitive" if sensitive else event_type
+    if event_type in _NETWORK_TYPES:
+        domain = _domain_of(resource)
+        return f"{event_type}:{domain}" if domain else event_type
+    if event_type in _PROCESS_TYPES:
+        return event_type
+    if event_type in _SECRET_TYPES:
+        return event_type
+    return event_type
+
+
 def capability_tokens(events: list[dict]) -> set[str]:
     """Reduce a run's raw events to a set of coarse capability tokens.
 
@@ -77,20 +101,32 @@ def capability_tokens(events: list[dict]) -> set[str]:
     """
     tokens: set[str] = set()
     for e in events:
-        et = e.get("event_type")
-        if not et or et in _NON_CAPABILITY_TYPES:
-            continue
-        if et in _FS_TYPES:
-            tokens.add(f"{et}:sensitive" if e.get("sensitive") else et)
-        elif et in _NETWORK_TYPES:
-            domain = _domain_of(e.get("resource"))
-            tokens.add(f"{et}:{domain}" if domain else et)
-        elif et in _PROCESS_TYPES:
-            tokens.add(et)
-        elif et in _SECRET_TYPES:
-            tokens.add(et)
-        else:
-            tokens.add(et)
+        token = token_for_event(e.get("event_type"), e.get("resource"), bool(e.get("sensitive")))
+        if token is not None:
+            tokens.add(token)
+    return tokens
+
+
+def load_prior_tokens(runs_dir: Path) -> set[str]:
+    """This skill's true behavioral baseline (AST07 -- Update Drift): the
+    union of every capability token observed across every invocation's raw
+    event log already on disk in `runs_dir`, computed directly from
+    `*.events.jsonl` rather than from `fingerprints.json` -- so it works
+    identically whether prior invocations went through `skillfence run`
+    (which also records a fingerprint) or `skillfence bench` (which
+    doesn't), since both leave one events file per invocation either way.
+
+    Called before the *current* invocation's own events file exists, so
+    every file found here is genuinely a prior run. Empty on a skill's
+    first-ever invocation -- nothing to compare against yet, which is the
+    correct "no baseline" state, not an empty baseline that would make
+    everything look new.
+    """
+    if not runs_dir.exists():
+        return set()
+    tokens: set[str] = set()
+    for events_path in runs_dir.glob("*.events.jsonl"):
+        tokens.update(capability_tokens(list(read_jsonl(events_path))))
     return tokens
 
 

@@ -20,7 +20,9 @@ from skillfence.runtime.gateway import ActionBlocked, RuntimeGateway
 from skillfence.runtime.sandbox import Sandbox
 
 
-def _make_gateway(tmp_path: Path, *, decision: str = "reject") -> RuntimeGateway:
+def _make_gateway(
+    tmp_path: Path, *, decision: str = "reject", known_capability_tokens: frozenset[str] = frozenset()
+) -> RuntimeGateway:
     sandbox_root = tmp_path / "sandbox"
     (sandbox_root / "logs").mkdir(parents=True)
     (sandbox_root / "logs" / "app.log").write_text("hello", encoding="utf-8")
@@ -40,6 +42,7 @@ def _make_gateway(tmp_path: Path, *, decision: str = "reject") -> RuntimeGateway
         session_id="test-session",
         agent="test-agent",
         skill=manifest.name,
+        known_capability_tokens=known_capability_tokens,
     )
     gateway.start()
     return gateway
@@ -378,3 +381,37 @@ def test_manifest_without_scan_attestation_never_tagged_ast08(tmp_path: Path):
     with pytest.raises(ActionBlocked) as excinfo:
         gateway.authorize(kind="fs_read", resource="~/.aws/credentials")
     assert "AST08" not in excinfo.value.finding.ast
+
+
+# -- AST07: update drift (behavioral-baseline variant) -- a capability     --
+# -- token never seen in any PRIOR invocation, even though it's within    --
+# -- the current manifest's declared scope right now                     --
+
+
+def test_new_capability_since_baseline_tags_ast07_when_token_unseen_before(tmp_path: Path):
+    # baseline exists (non-empty) but never saw a sensitive filesystem read
+    gateway = _make_gateway(tmp_path, decision="reject", known_capability_tokens=frozenset({"process.exec"}))
+    with pytest.raises(ActionBlocked) as excinfo:
+        gateway.authorize(kind="fs_read", resource="~/.aws/credentials")
+    finding = excinfo.value.finding
+    assert "AST07" in finding.ast
+    assert any("never observed in any prior invocation" in reason for reason in finding.why_flagged)
+
+
+def test_new_capability_since_baseline_not_tagged_when_token_already_seen(tmp_path: Path):
+    # baseline already includes this exact token -- not new, must not fire
+    gateway = _make_gateway(
+        tmp_path, decision="reject", known_capability_tokens=frozenset({"filesystem.read:sensitive"})
+    )
+    with pytest.raises(ActionBlocked) as excinfo:
+        gateway.authorize(kind="fs_read", resource="~/.aws/credentials")
+    assert "AST07" not in excinfo.value.finding.ast
+
+
+def test_new_capability_since_baseline_never_fires_with_no_prior_invocation(tmp_path: Path):
+    # empty baseline (first-ever invocation) must disable the check entirely,
+    # not treat every token as new
+    gateway = _make_gateway(tmp_path, decision="reject")  # known_capability_tokens defaults to empty
+    with pytest.raises(ActionBlocked) as excinfo:
+        gateway.authorize(kind="fs_read", resource="~/.aws/credentials")
+    assert "AST07" not in excinfo.value.finding.ast

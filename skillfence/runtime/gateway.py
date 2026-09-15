@@ -22,6 +22,7 @@ from skillfence.correlation.session import CorrelationEngine
 from skillfence.events.bus import EventBus
 from skillfence.events.schema import DecisionState, Event, EventType, new_id
 from skillfence.findings.schema import Finding
+from skillfence.fingerprint.behavior import token_for_event
 from skillfence.hitl.cli_gate import HumanGate
 from skillfence.hitl.decisions import DecisionRecord, DecisionRequest, DecisionType
 from skillfence.policy.engine import PolicyEngine, PolicyResult
@@ -58,6 +59,7 @@ class RuntimeGateway:
         observe_mode: bool = False,
         policy_store: PolicyStore | None = None,
         skill_definition_text: str | None = None,
+        known_capability_tokens: frozenset[str] = frozenset(),
     ) -> None:
         self.bus = bus
         self.manifest = manifest
@@ -120,6 +122,20 @@ class RuntimeGateway:
         # happened in between.
         self._manifest_history: list[CapabilityManifest] = []
         self._post_update = False
+
+        # AST07 (update drift, behavioral-baseline variant): every
+        # capability token this skill has ever produced across ALL of its
+        # prior invocations, computed by the caller from raw event logs
+        # already on disk (see `fingerprint.behavior.load_prior_tokens`)
+        # -- not the manifest, not the immediately-prior run alone. A
+        # token that's within the *current* manifest's declared scope can
+        # still be new relative to this skill's own observed history,
+        # which is exactly the "the manifest never had to change for
+        # behavior to drift" gap policy-declared-vs-observed alone can't
+        # see. Empty on a skill's first-ever invocation, which correctly
+        # disables this check entirely (see `_enforce`) rather than
+        # treating everything as "new."
+        self._known_capability_tokens = set(known_capability_tokens)
         # AST10 (cross-platform reuse): set once any `apply_update()` in
         # this session was itself a platform migration (a skill ported
         # from one agent framework/OS to another), not an ordinary version
@@ -681,6 +697,24 @@ class RuntimeGateway:
             # AST05 (no external fetch was involved in this action).
             ast = sorted(set(ast) | {"AST01"})
 
+        # AST07 (update drift, behavioral-baseline variant): this exact
+        # capability token has never been observed in ANY prior invocation
+        # of this skill, even though it's within the *current* manifest's
+        # declared scope right now -- the manifest never had to change for
+        # the skill's real behavior to drift, because the declared scope
+        # was already broad enough to cover it. Guarded on
+        # `self._known_capability_tokens` being non-empty: a skill's
+        # first-ever invocation has no baseline to drift from, so nothing
+        # should fire, not "everything is new."
+        capability_token = token_for_event(event_type.value, resource, policy_result.sensitive)
+        new_capability_since_baseline = (
+            bool(self._known_capability_tokens)
+            and capability_token is not None
+            and capability_token not in self._known_capability_tokens
+        )
+        if new_capability_since_baseline:
+            ast = sorted(set(ast) | {"AST07"})
+
         risk_kwargs = dict(
             sensitive_credential_read=policy_result.sensitive and event_type in (EventType.FS_READ, EventType.SECRET_ACCESS),
             undeclared_capability=not policy_result.declared,
@@ -690,6 +724,7 @@ class RuntimeGateway:
             previously_approved_exact_action=session_prior_approval,
             behavior_changed_after_update=behavior_changed_after_update,
             platform_migration_involved=self._platform_migration,
+            new_capability_since_baseline=new_capability_since_baseline,
             hidden_unicode_payload=self._hidden_unicode_payload_active,
         )
         risk_kwargs.update(extra_risk or {})
@@ -737,7 +772,12 @@ class RuntimeGateway:
             ast=finding.ast,  # fully classified (AST01/AST05/chain tags included), not the pre-expansion `ast` list
             provenance=provenance_text,
         )
-        explanation = self._explain(request, policy_result, behavior_changed_after_update=behavior_changed_after_update)
+        explanation = self._explain(
+            request,
+            policy_result,
+            behavior_changed_after_update=behavior_changed_after_update,
+            new_capability_since_baseline=new_capability_since_baseline,
+        )
         decision = self.human_gate.decide(request, explanation=explanation, provenance=provenance_text)
 
         self._publish(
@@ -923,6 +963,7 @@ class RuntimeGateway:
         policy_result: PolicyResult,
         *,
         behavior_changed_after_update: bool = False,
+        new_capability_since_baseline: bool = False,
     ) -> str:
         # Human-readable paragraph.
         lines = [
@@ -947,6 +988,12 @@ class RuntimeGateway:
                 f"This skill's manifest declares it already passed a security scan{scan_tool} — that "
                 "attestation is not being trusted here; a scan attestation is never a substitute for "
                 "runtime enforcement, and this finding is the proof."
+            )
+        if new_capability_since_baseline:
+            lines.append(
+                "This skill has never done this before, in any prior invocation — even though it's within "
+                "the current manifest's declared scope right now. The manifest didn't need to change for this "
+                "behavior to drift; the declared scope was already broad enough to cover it."
             )
         if behavior_changed_after_update:
             if self._platform_migration:
