@@ -35,6 +35,7 @@ Quick start — the pre-built labs:
   skillfence learn                                       # guided menu — pick a lab, see its mission, run it
   skillfence policy list                                 # see every remembered approval (org-wide)
   skillfence inventory DVAS                              # fleet-wide governance report (never-reviewed skills, ungoverned grants)
+  skillfence lab ui DVAS                                 # live web UI -- browse every lab and run one from the browser
 
 Quick start — checking YOUR OWN skill:
   skillfence inspect path/to/your-skill                  # static check, needs only skill/manifest.yaml
@@ -206,6 +207,44 @@ def lab_list(
         table.add_row(info.ast, info.name, info.skill_name, kind, purpose)
     console.print(table)
     console.print(f"\n[dim]Run one with: skillfence run <lab dir>   (or `skillfence run {infos[0].ast.lower()}` if unambiguous)[/dim]")
+
+
+@lab_app.command(
+    "ui",
+    epilog="Examples:\n  skillfence lab ui DVAS\n  skillfence lab ui DVAS --port 9000\n  skillfence lab ui DVAS --no-browser\n",
+)
+def lab_ui(
+    labs_root: Path = typer.Argument(DEFAULT_LABS_ROOT, help="Root directory to scan for skill/manifest.yaml"),
+    port: int = typer.Option(0, "--port", help="Port to bind (127.0.0.1 only). 0 (default) picks a free port."),
+    open_browser: bool = typer.Option(True, "--browser/--no-browser", help="Open the explorer in a browser tab on start."),
+):
+    """A local, live web UI over the labs under ROOT: browse every lab's
+    declared capabilities, SKILL.md, and README.md, then actually run one
+    through the real SkillFence engine and see its real findings, right
+    in the browser. Same discovery `lab list` uses, same `run_lab()` every
+    CLI command calls — no separate "web" version of a lab, no mock data.
+    Bound to 127.0.0.1 only — never reachable from another machine."""
+    import webbrowser
+
+    from skillfence.labui.server import build_server
+
+    if not labs_root.exists():
+        console.print(f"[red]{labs_root} does not exist[/red]")
+        raise typer.Exit(1)
+
+    server = build_server(labs_root, port=port)
+    url = f"http://127.0.0.1:{server.server_address[1]}/"
+    console.print(f"[bold green]SkillFence Lab Explorer[/bold green] — {url}")
+    console.print(f"  scanning: {labs_root.resolve()}")
+    console.print("  Ctrl-C to stop\n")
+    if open_browser:
+        webbrowser.open(url)
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        server.server_close()
 
 
 @app.command(

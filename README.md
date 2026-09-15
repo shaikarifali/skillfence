@@ -265,6 +265,23 @@ events as they land (a growing file's cache entry invalidates itself; a
 brand-new session appears once the walk cache's short TTL expires).
 Bound to `127.0.0.1` only — never reachable from another machine.
 
+### Lab Explorer — live web UI
+
+```bash
+skillfence lab ui DVAS                    # browse every discovered lab, run one from the browser
+skillfence lab ui DVAS --port 9000
+```
+The dashboard above is read-only, past sessions only. This is the other
+direction: a live browser view over the labs themselves — declared
+capabilities, `SKILL.md`, `README.md`, and a `ground-truth.yaml`
+expectation where one exists — with a **Run** control that actually
+executes the lab through the real engine (`lab_runner.run_lab()`, the
+exact function `run`/`bench` call) and renders its real findings,
+including the unedited `Finding.explain()` text, right in the page. No
+mock data, no separate "web" representation of a lab — the same discovery
+`lab list` uses, reading the same files. Bound to `127.0.0.1` only, same
+as the dashboard.
+
 ### Sign and verify evidence (tamper-evident audit trail)
 
 ```bash

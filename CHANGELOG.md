@@ -5,7 +5,25 @@ All notable changes to SkillFence are documented here. Loosely follows
 
 ## [Unreleased]
 
+### Fixed
+- **AST07 (Update Drift) behavioral-baseline detection is now actually
+  wired up.** `new_capability_since_baseline` existed as a defined risk
+  factor but nothing ever passed it into the gateway's enforcement path —
+  it was dead code. A skill's cross-invocation behavioral history (every
+  capability token it's produced across every prior run, computed
+  directly from raw event logs already on disk) is now loaded before each
+  run and actually checked, so a capability token never seen in any prior
+  invocation gets tagged AST07 and scored, even when it's within the
+  current manifest's declared scope.
+
 ### Added
+- **`skillfence lab ui`** — a live local web UI over a lab suite: browse
+  every discovered lab's declared capabilities, `SKILL.md`, and
+  `README.md`, then run one through the real engine and see its real
+  findings (including the unedited `Finding.explain()` text) directly in
+  the browser. Reuses the same discovery `lab list` uses and the same
+  `run_lab()` every other command calls — no mock data, no separate "web"
+  representation of a lab.
 - **Full OWASP Agentic Skills Top 10 coverage (AST01–AST10).**
 - **AST10 (Cross-Platform Reuse) coverage** — reuses the AST02
   baseline-drift detection (a capability declared now that was absent
