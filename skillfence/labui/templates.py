@@ -153,6 +153,8 @@ table.kv td.v{ font-family:var(--mono); font-size:12.5px; }
 .run-btn:hover:not(:disabled){ background:var(--accent-strong); }
 .run-btn:disabled{ opacity:.4; cursor:default; }
 #run-status{ font-size:12.5px; color:var(--ink-dim); }
+.reveal-btn{ background:var(--surface); color:var(--ink-dim); border:1px dashed var(--rule-strong); border-radius:6px; padding:9px 16px; font-size:12.5px; font-weight:600; cursor:pointer; width:100%; text-align:left; }
+.reveal-btn:hover{ border-color:var(--accent); color:var(--accent-strong); border-style:solid; }
 
 table.results{ width:100%; border-collapse:collapse; font-size:13px; }
 table.results th{ text-align:left; color:var(--ink-faint); font-weight:700; font-size:10.5px; letter-spacing:.04em; text-transform:uppercase; padding:9px 16px; border-bottom:1px solid var(--rule); background:var(--surface-2); }
@@ -270,9 +272,10 @@ function renderSidebar() {
       const row = document.createElement("div");
       row.className = "lab-row" + (lab.name === selectedName ? " selected" : "");
       row.onclick = () => selectLab(lab.name);
-      const verdict = lab.malicious === null ? "" :
-        `<div class="verdict-label"><span class="dot ${lab.malicious ? "malicious" : "benign"}"></span>${lab.malicious ? "malicious" : "benign"}</div>`;
-      row.innerHTML = `<div class="skill">${esc(lab.skill_name)}</div><div class="slug">${esc(lastSegment(lab.name))}</div>${verdict}`;
+      // Deliberately no malicious/benign indicator here -- showing the
+      // verdict in the nav list would spoil every lab before it's even
+      // opened. Read the skill, run it, then reveal the analysis.
+      row.innerHTML = `<div class="skill">${esc(lab.skill_name)}</div><div class="slug">${esc(lastSegment(lab.name))}</div>`;
       list.appendChild(row);
     }
   }
@@ -357,15 +360,28 @@ function renderFileTabs(name, skillMd, readme) {
   return `<div class="card"><div class="tabs">${tabsHtml}</div><div class="tab-body">${panelsHtml}</div></div>`;
 }
 
-function renderGroundTruth(gt) {
-  if (!gt) return "";
-  const ef = gt.expected_finding || {};
-  const isMalicious = gt.ground_truth && gt.ground_truth.malicious;
-  return `<div class="meta-row">
-    <span class="pill">expected: ${isMalicious ? "malicious" : "benign"}</span>
+function renderSolution(detail) {
+  const gt = detail.ground_truth;
+  const isMalicious = gt && gt.ground_truth && gt.ground_truth.malicious;
+  const ef = (gt && gt.expected_finding) || {};
+  const verdictPills = gt ? `<div class="meta-row">
+    <span class="pill">verdict: ${isMalicious ? "malicious" : "benign"}</span>
     ${(ef.ast || []).map(t => `<span class="pill">${esc(t)}</span>`).join("")}
     ${ef.severity_at_least ? `<span class="pill">severity &ge; ${esc(ef.severity_at_least)}</span>` : ""}
-  </div>`;
+  </div>` : "";
+  const caseTitle = gt && gt.title ? `<p style="font-weight:700;margin-bottom:10px;">${esc(gt.title)}</p>` : "";
+  const readme = detail.readme
+    ? `<div class="card" style="margin-top:14px;"><div class="tab-body" style="max-height:none;"><pre>${esc(detail.readme)}</pre></div></div>`
+    : "<p style='color:var(--ink-faint);font-size:13px;'>No README.md found.</p>";
+  return `
+    <div class="section">
+      <button class="reveal-btn" id="reveal-btn">Show analysis &amp; expected verdict</button>
+      <div id="solution-body" style="display:none; margin-top:16px;">
+        ${caseTitle}
+        ${verdictPills}
+        ${readme}
+      </div>
+    </div>`;
 }
 
 async function selectLab(name) {
@@ -373,16 +389,12 @@ async function selectLab(name) {
   renderSidebar();
   const detail = await fetchJSON(`/api/lab/${name.split("/").map(encodeURIComponent).join("/")}`);
   setCrumbs([{label: "Overview"}, {label: detail.ast}, {label: detail.skill_name}]);
-  const missionTitle = detail.ground_truth && detail.ground_truth.title;
-  const mission = missionTitle ? `<div class="mission">${esc(missionTitle)}</div>` : "";
   document.getElementById("main").innerHTML = `
     <div class="page">
       <div class="eyebrow">Chapter ${esc(chapterOf(detail.ast).roman)} &mdash; ${esc(chapterOf(detail.ast).name)} <span style="color:var(--ink-faint);font-weight:600;">&middot; ${esc(detail.ast)} &middot; ${esc(catName(detail.ast))}</span></div>
       <div class="title">${esc(detail.skill_name)}</div>
-      ${mission}
       <div class="slug">${esc(detail.name)} &middot; v${esc(detail.version)}${detail.session_count ? ` &middot; run ${detail.session_count}&times; before` : " &middot; never run"}</div>
       <div class="meta-row">${(detail.purpose || []).map(p => `<span class="pill">${esc(p)}</span>`).join("")}</div>
-      ${renderGroundTruth(detail.ground_truth)}
 
       <div class="section">
         <div class="section-title">Declared capabilities</div>
@@ -390,8 +402,8 @@ async function selectLab(name) {
       </div>
 
       <div class="section">
-        <div class="section-title">Files</div>
-        ${renderFileTabs(detail.name, detail.skill_md, detail.readme) || "<p style='color:var(--ink-faint);font-size:13px;'>No SKILL.md or README.md found.</p>"}
+        <div class="section-title">SKILL.md</div>
+        ${renderFileTabs(detail.name, detail.skill_md, null) || "<p style='color:var(--ink-faint);font-size:13px;'>No SKILL.md found.</p>"}
       </div>
 
       <div class="section">
@@ -412,6 +424,8 @@ async function selectLab(name) {
         </div>
         <div id="run-result"></div>
       </div>
+
+      ${renderSolution(detail)}
     </div>
   `;
   document.querySelectorAll(".tab").forEach(tab => {
@@ -423,6 +437,13 @@ async function selectLab(name) {
       document.getElementById(tab.getAttribute("data-panel")).classList.add("active");
     };
   });
+  const revealBtn = document.getElementById("reveal-btn");
+  if (revealBtn) revealBtn.onclick = () => {
+    const body = document.getElementById("solution-body");
+    const open = body.style.display !== "none";
+    body.style.display = open ? "none" : "block";
+    revealBtn.textContent = open ? "Show analysis & expected verdict" : "Hide analysis & expected verdict";
+  };
   if (detail.runnable) document.getElementById("run-btn").onclick = () => runLab(detail.name);
 }
 
