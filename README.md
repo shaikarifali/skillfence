@@ -15,6 +15,9 @@
 > Do not drown the human in alerts. Interrupt only at meaningful security boundaries.
 > Do not let the model make the final consequential decision. Give the human evidence and let the human authorize the action.
 
+New to Agentic Skills entirely? **[Start with "What is an Agentic Skill?"](https://github.com/shaikarifali/DVAS/blob/main/docs/what-is-an-agentic-skill.md)**
+— a zero-context primer before the technical detail below.
+
 ## What is SkillFence?
 
 SkillFence is a runtime behavioral security layer for Agentic Skills, built
