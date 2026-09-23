@@ -15,8 +15,38 @@ All notable changes to SkillFence are documented here. Loosely follows
   run and actually checked, so a capability token never seen in any prior
   invocation gets tagged AST07 and scored, even when it's within the
   current manifest's declared scope.
+- **Lab Explorer: sidebar and main panel weren't scrolling independently.**
+  `.shell` used `min-height` instead of `height`, and neither `#sidebar`
+  nor `#main` had `min-height:0` — the classic flexbox bug where a tall
+  child (the full lab list) forces the whole flex container past the
+  viewport instead of scrolling internally. The whole page grew to the
+  sidebar's full content height instead of the two panes scrolling on
+  their own.
+- **Lab Explorer: the ground-truth verdict, AST tags, and severity were
+  shown before a lab was ever run**, spoiling every lab before it could be
+  judged. The analysis is now collapsed behind a "Show analysis & expected
+  verdict" reveal, opened only after a decision has actually been made —
+  and the decision itself can no longer be picked blind: **Run** is now a
+  two-step **Observe** (runs for real, blocks nothing, shows true
+  behavior) then **Decide** (choose the human-gate response with the real
+  evidence already in front of you, then **Enforce** it for real).
 
 ### Added
+- **Progressive hints.** `skillfence lab hint <lab> [--level N]` reveals a
+  lab's hints one at a time, in order, without spoiling the analysis; the
+  Lab Explorer's lab pages get a matching "Stuck? Hints" section with the
+  same one-at-a-time reveal. Every runnable DVAS lab ships a `hints.md`.
+- **Lab Explorer: a heraldic identity per OWASP chapter** — a distinct
+  shield icon and color per category, a dedicated Chapter overview page
+  (the real issue, the real fix, a real-world-evidence citation, and that
+  chapter's labs), reachable from the landing page, the sidebar, and every
+  lab's own eyebrow. Benign controls and the multi-category capstone are
+  now correctly kept out of the "ten OWASP categories" count instead of
+  being miscounted as an 11th/12th category.
+- **A zero-context onboarding doc**, linked at the top of this README —
+  what an agentic skill actually is, why a manifest and `SKILL.md` alone
+  can't be trusted, and what SkillFence does about it at runtime, for a
+  reader who has never seen either project before.
 - **Identity/memory persistence detection (AST01).** `write_file()` now
   recognizes writes to conventional agent identity/memory files
   (`MEMORY.md`, `AGENTS.md`, `CLAUDE.md`, `SOUL.md`, ...) as a distinct,
