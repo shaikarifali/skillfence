@@ -37,7 +37,7 @@ jobs:
       - name: pytest
         run: python -m pytest -q
 
-      - name: Benchmark — DVAS (15/15 malicious detected, 0/2 false positives expected)
+      - name: Benchmark — DVAS (28/28 malicious detected, 0/3 false positives expected)
         run: skillfence bench ../DVAS
 
       - name: Benchmark — adversarial/evasion corpus (12/12 detected, 0/5 false positives expected)

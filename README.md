@@ -64,9 +64,10 @@ enforcement signal*.
 SkillFence is the tool. **[DVAS](https://github.com/shaikarifali/DVAS) —
 Damn Vulnerable Agentic Skills** is a separate, companion repository: a
 deliberately vulnerable lab suite (built the way DVWA is built for web
-apps) that this runtime is built and benchmarked against — 17 fully
-offline labs across AST01–AST05, each with a machine-readable
-`ground-truth.yaml`.
+apps) that this runtime is built and benchmarked against — full OWASP
+Agentic Skills Top 10 coverage (AST01–AST10), 28 fully offline malicious
+labs plus a multi-category capstone and 3 benign controls, each with a
+machine-readable `ground-truth.yaml`.
 
 You don't need DVAS to use SkillFence on your own skills (see
 [Using SkillFence on your own skill](#using-skillfence-on-your-own-skill)
@@ -844,15 +845,15 @@ alongside this repo (see **SkillFence + DVAS** above):
 skillfence bench ../DVAS
 ```
 
-Current numbers on DVAS's 17 single-shot labs (15 malicious — 3 per
-category across AST01–AST05, plus 2 benign) — one lab,
-`AST01/delayed-payload`, is multi-run and covered by its own dedicated
-test instead (`tests/test_delayed_payload.py`):
+Current numbers on DVAS's single-shot labs across all ten OWASP
+categories plus the capstone (28 malicious, 3 benign) — the AST07
+labs and `AST01/delayed-payload` are multi-run and covered by their
+own dedicated tests instead (see `tests/`):
 
 ```
-Detection rate: 15/15 malicious labs flagged
-False-positive rate: 0/2 benign labs incorrectly flagged
-Human interruptions across benchmark: 15 (0 expected on benign, 15 on malicious)
+Detection rate: 28/28 malicious labs flagged
+False-positive rate: 0/3 benign labs incorrectly flagged
+Human interruptions across benchmark: 28 (0 expected on benign, 28 on malicious)
 ```
 
 Also runnable as a regression suite: `python3 -m pytest tests/` (these
@@ -910,7 +911,7 @@ needs: [`examples/github-action/consumer-workflow-example.yml`](examples/github-
 
 This repo's own CI (`.github/workflows/tests.yml`) runs the full test
 suite plus `skillfence bench` against a fresh DVAS clone on every push —
-the 15/15 · 0/2 numbers above are enforced, not just claimed.
+the 28/28 · 0/3 numbers above are enforced, not just claimed.
 
 ## Limitations
 
