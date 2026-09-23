@@ -43,6 +43,7 @@ def _build_lab(tmp_path: Path, *, malicious: bool = True) -> Path:
         "expected_finding:\n  ast: [AST01, AST03]\n  severity_at_least: high\n",
         encoding="utf-8",
     )
+    (lab_dir / "hints.md").write_text("1. First hint.\n2. Second hint.\n", encoding="utf-8")
     return tmp_path
 
 
@@ -70,6 +71,14 @@ def test_lab_detail_reads_real_files(tmp_path: Path):
     assert detail["ground_truth"]["ground_truth"]["malicious"] is True
     assert detail["runnable"] is True
     assert detail["session_count"] == 0
+    assert detail["hints"] == ["First hint.", "Second hint."]
+
+
+def test_lab_detail_hints_empty_when_no_hints_file(tmp_path: Path):
+    root = _build_lab(tmp_path)
+    (root / "AST01" / "demo-lab" / "hints.md").unlink()
+    detail = lab_detail(root, "AST01/demo-lab")
+    assert detail["hints"] == []
 
 
 def test_lab_detail_returns_none_for_unknown_lab(tmp_path: Path):

@@ -189,6 +189,14 @@ table.kv td.v{ font-family:var(--mono); font-size:12.5px; }
 .reveal-btn{ background:var(--surface); color:var(--ink-dim); border:1px dashed var(--rule-strong); border-radius:6px; padding:9px 16px; font-size:12.5px; font-weight:600; cursor:pointer; width:100%; text-align:left; }
 .reveal-btn:hover{ border-color:var(--accent); color:var(--accent-strong); border-style:solid; }
 
+.hint-list{ list-style:none; margin:0; padding:0; }
+.hint-list li{ padding:12px 16px; border-bottom:1px solid var(--rule); font-size:13px; color:var(--ink-dim); display:flex; gap:10px; }
+.hint-list li[hidden]{ display:none; }
+.hint-list li:last-child{ border-bottom:none; }
+.hint-list .num{ flex-shrink:0; width:20px; height:20px; border-radius:50%; background:var(--accent-wash); color:var(--accent-strong); font-size:11px; font-weight:700; display:flex; align-items:center; justify-content:center; }
+.hint-more-btn{ background:none; color:var(--accent-strong); border:none; padding:12px 16px; font-size:12.5px; font-weight:600; cursor:pointer; width:100%; text-align:left; }
+.hint-more-btn:hover{ background:var(--surface-2); }
+
 table.results{ width:100%; border-collapse:collapse; font-size:13px; }
 table.results th{ text-align:left; color:var(--ink-faint); font-weight:700; font-size:10.5px; letter-spacing:.04em; text-transform:uppercase; padding:9px 16px; border-bottom:1px solid var(--rule); background:var(--surface-2); }
 table.results td{ padding:10px 16px; border-bottom:1px solid var(--rule); vertical-align:top; }
@@ -605,6 +613,39 @@ function renderFileTabs(name, skillMd, readme) {
   return `<div class="card"><div class="tabs">${tabsHtml}</div><div class="tab-body">${panelsHtml}</div></div>`;
 }
 
+function renderHints(hints) {
+  if (!hints || !hints.length) return "";
+  const items = hints.map((h, i) =>
+    `<li data-hint-idx="${i}" hidden><span class="num">${i + 1}</span><span>${esc(h)}</span></li>`
+  ).join("");
+  return `
+    <div class="section">
+      <div class="section-title">Stuck? Hints</div>
+      <p style="color:var(--ink-dim); font-size:13px; margin-bottom:12px;">Each hint gives away a
+      little more than the last — try reasoning from the SKILL.md above before reaching for one.</p>
+      <div class="card">
+        <ul class="hint-list" id="hint-list">${items}</ul>
+        <button class="hint-more-btn" id="hint-more-btn">Show hint 1 of ${hints.length}</button>
+      </div>
+    </div>`;
+}
+
+function wireHints(hints) {
+  const btn = document.getElementById("hint-more-btn");
+  if (!btn || !hints || !hints.length) return;
+  let shown = 0;
+  btn.onclick = () => {
+    const li = document.querySelector(`#hint-list li[data-hint-idx="${shown}"]`);
+    if (li) li.hidden = false;
+    shown++;
+    if (shown < hints.length) {
+      btn.textContent = `Show hint ${shown + 1} of ${hints.length}`;
+    } else {
+      btn.remove();
+    }
+  };
+}
+
 function renderSolution(detail) {
   const gt = detail.ground_truth;
   const isMalicious = gt && gt.ground_truth && gt.ground_truth.malicious;
@@ -661,6 +702,8 @@ async function selectLab(name) {
         ${renderFileTabs(detail.name, detail.skill_md, null) || "<p style='color:var(--ink-faint);font-size:13px;'>No SKILL.md found.</p>"}
       </div>
 
+      ${renderHints(detail.hints)}
+
       <div class="section">
         <div class="section-title">1. Observe</div>
         <p style="color:var(--ink-dim); font-size:13px; margin-bottom:12px;">Runs the skill for real and records every real action it takes —
@@ -708,6 +751,7 @@ async function selectLab(name) {
     };
   });
   document.getElementById("eyebrow-link").onclick = goToGroup;
+  wireHints(detail.hints);
   const revealBtn = document.getElementById("reveal-btn");
   if (revealBtn) revealBtn.onclick = () => {
     const body = document.getElementById("solution-body");

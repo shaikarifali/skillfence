@@ -20,6 +20,7 @@ from skillfence.cli.lab_catalog import discover_labs
 from skillfence.events.bus import EventBus
 from skillfence.events.schema import DecisionState, Event, EventType
 from skillfence.fingerprint.behavior import record_and_diff
+from skillfence.hints import parse_hints
 from skillfence.hitl.decisions import DecisionType
 from skillfence.lab_runner import run_lab
 from skillfence.policy.store import GRANT_DEFAULT_TTL, PolicyStore, default_policy_store_path
@@ -36,6 +37,7 @@ Quick start — the pre-built labs:
   skillfence policy list                                 # see every remembered approval (org-wide)
   skillfence inventory DVAS                              # fleet-wide governance report (never-reviewed skills, ungoverned grants)
   skillfence lab ui DVAS                                 # live web UI -- browse every lab and run one from the browser
+  skillfence lab hint DVAS/AST05/external-doc-injection  # stuck? reveal one hint at a time with --level
 
 Quick start — checking YOUR OWN skill:
   skillfence inspect path/to/your-skill                  # static check, needs only skill/manifest.yaml
@@ -245,6 +247,35 @@ def lab_ui(
         pass
     finally:
         server.server_close()
+
+
+@lab_app.command(
+    "hint",
+    epilog="Examples:\n  skillfence lab hint DVAS/AST05/external-doc-injection\n  skillfence lab hint ast05 --level 2\n",
+)
+def lab_hint(
+    lab: Path = typer.Argument(..., help="Path to a lab directory, or an AST shorthand (e.g. ast05)"),
+    level: int = typer.Option(1, "--level", min=1, help="How many hints to reveal, in order. 1 = just the first."),
+):
+    """Print a lab's progressive hints, in order, without spoiling the
+    analysis. Each hint gives away a little more than the last — try the
+    lab yourself before reaching for --level 2 or 3."""
+    lab = _resolve_lab(lab)
+    hints_path = lab / "hints.md"
+    if not hints_path.exists():
+        console.print(f"[yellow]No hints.md for {lab}[/yellow]")
+        raise typer.Exit(1)
+
+    hints = parse_hints(hints_path.read_text(encoding="utf-8"))
+    if not hints:
+        console.print(f"[yellow]{hints_path} has no parseable hints (expected a numbered list).[/yellow]")
+        raise typer.Exit(1)
+
+    for i, hint in enumerate(hints[:level], start=1):
+        console.print(f"[bold]Hint {i}/{len(hints)}:[/bold] {hint}")
+
+    if level < len(hints):
+        console.print(f"\n[dim]{len(hints) - level} more hint(s) available — rerun with --level {level + 1}[/dim]")
 
 
 @app.command(

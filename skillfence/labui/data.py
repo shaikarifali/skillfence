@@ -12,6 +12,7 @@ from pathlib import Path
 import yaml
 
 from skillfence.cli.lab_catalog import discover_labs
+from skillfence.hints import parse_hints
 from skillfence.lab_runner import run_lab
 from skillfence.policy.manifest import CapabilityManifest
 
@@ -65,6 +66,7 @@ def lab_detail(root: Path, name: str) -> dict | None:
     skill_md_path = lab_dir / "skill" / "SKILL.md"
     readme_path = lab_dir / "README.md"
     gt_path = lab_dir / "ground-truth.yaml"
+    hints_path = lab_dir / "hints.md"
 
     ground_truth: dict | None = None
     if gt_path.exists():
@@ -89,6 +91,7 @@ def lab_detail(root: Path, name: str) -> dict | None:
         "ground_truth": ground_truth,
         "runnable": (lab_dir / "script.yaml").exists(),
         "session_count": session_count,
+        "hints": parse_hints(hints_path.read_text(encoding="utf-8")) if hints_path.exists() else [],
     }
 
 
