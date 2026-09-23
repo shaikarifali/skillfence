@@ -81,6 +81,18 @@ pip install -e .
 skillfence run ../DVAS/AST05/external-doc-injection
 ```
 
+That's the deterministic, scripted path — correct for benchmarking, but
+driven by a scripted stand-in agent, not a real LLM. To connect an actual
+agent (Claude Desktop, Cline, the MCP Inspector) to a lab and watch it
+decide on its own what to do, still fully sandboxed:
+
+```bash
+skillfence lab live ../DVAS/AST05/external-doc-injection
+```
+
+See [`docs/live-mode.md`](docs/live-mode.md) for exact client connection
+config.
+
 ## Demo
 
 ```

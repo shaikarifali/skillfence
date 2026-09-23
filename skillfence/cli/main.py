@@ -278,6 +278,72 @@ def lab_hint(
         console.print(f"\n[dim]{len(hints) - level} more hint(s) available — rerun with --level {level + 1}[/dim]")
 
 
+LAB_LIVE_EXAMPLES = """\
+Examples:
+  skillfence lab live DVAS/AST05/external-doc-injection
+  skillfence lab live ast05 --port 8901 --decision reject
+
+Then connect a real MCP client to http://127.0.0.1:<port>/mcp (Streamable
+HTTP) — see docs/live-mode.md for exact config for the MCP Inspector,
+Claude Desktop, and Cline.
+"""
+
+
+@lab_app.command("live", epilog=LAB_LIVE_EXAMPLES)
+def lab_live(
+    lab: Path = typer.Argument(..., help="Path to a lab directory, or an AST shorthand (e.g. ast05)"),
+    port: int = typer.Option(0, "--port", help="Port to bind (127.0.0.1 only). 0 (default) picks a free port."),
+    decision: Optional[str] = typer.Option(
+        None,
+        "--decision",
+        help="Non-interactive: auto-answer every human decision gate with this choice. "
+        "Omit for the real interactive prompt (recommended — that's the point of Live Mode).",
+    ),
+):
+    """Run a lab as a real, connectable MCP server: a real agent (Claude
+    Desktop, Cline, MCP Inspector) decides what to call and when, instead
+    of the deterministic scripted reference agent every other `skillfence
+    run` uses. Every call still executes inside the same sandboxed
+    RuntimeGateway as any other lab — nothing here opens a real socket,
+    runs a real shell command, or touches a real credential. This process
+    is meant to keep running in its own terminal: unlike `mcp-proxy`, it is
+    never spawned by the client, so its stdin is free and the normal
+    interactive human-gate prompt works exactly as it does for `skillfence
+    run`. Ctrl-C to stop."""
+    lab = _resolve_lab(lab)
+    if decision is not None:
+        try:
+            DecisionType(decision)
+        except ValueError:
+            console.print(f"[red]Unknown --decision value: {decision}[/red]")
+            raise typer.Exit(1)
+    if not (lab / "skill" / "manifest.yaml").exists():
+        console.print(f"[red]No skill/manifest.yaml under {lab}[/red]")
+        raise typer.Exit(1)
+
+    from skillfence.mcp.live_http import build_live_server
+
+    http_server, lab_server = build_live_server(lab, port=port, decision=decision, console=console)
+    url = f"http://127.0.0.1:{http_server.server_address[1]}/mcp"
+    console.print(f"[bold green]SkillFence Live Mode[/bold green] — {lab_server.gateway.skill}")
+    console.print(f"  listening: {url}")
+    console.print(f"  session:   {lab_server.session_id}")
+    console.print(f"  events:    {lab_server.events_path}")
+    if decision is None:
+        console.print("  [yellow]interactive[/yellow] — you'll be prompted here for any HIGH/CRITICAL action")
+    else:
+        console.print(f"  decision:  every gate auto-answered '{decision}'")
+    console.print("  Ctrl-C to stop\n")
+    try:
+        http_server.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        http_server.server_close()
+        n = len(lab_server.gateway.findings)
+        console.print(f"\n[dim]session {lab_server.session_id} ended — {n} finding(s) recorded[/dim]")
+
+
 @app.command(
     epilog="Examples:\n  skillfence inspect DVAS/AST03/unauthorized-network\n  skillfence inspect ast03\n"
     "  skillfence inspect examples/my-first-skill   # works on any skill/manifest.yaml, not just labs\n"

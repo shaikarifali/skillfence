@@ -5,6 +5,18 @@ All notable changes to SkillFence are documented here. Loosely follows
 
 ## [Unreleased]
 
+### Added
+- **`skillfence lab live`** — a real, connectable MCP server for one lab,
+  so a real agent (Claude Desktop, Cline, the MCP Inspector) decides on
+  its own what to call and when, instead of the deterministic scripted
+  reference agent `skillfence run` always uses. Every call still executes
+  inside the same sandboxed `RuntimeGateway` every other lab uses, built
+  the same way `run_lab()` builds one — nothing opens a real socket, runs
+  a real shell command, or touches a real credential. Stdlib-only HTTP
+  transport speaking the current MCP "Streamable HTTP" wire format,
+  verified end-to-end against the real `mcp` SDK's client. See
+  `docs/live-mode.md` for client connection config.
+
 ### Fixed
 - **AST07 (Update Drift) behavioral-baseline detection is now actually
   wired up.** `new_capability_since_baseline` existed as a defined risk

@@ -58,24 +58,36 @@ class LabRunResult:
     invocation_number: int
 
 
-def run_lab(
+@dataclass
+class LabGatewaySetup:
+    gateway: RuntimeGateway
+    session_id: str
+    events_path: Path
+    invocation_number: int
+
+
+def build_lab_gateway(
     lab_dir: Path,
     *,
     decision: Optional[str] = None,
     mode: str = "enforce",
     console: Optional[Console] = None,
     use_policy_store: bool = True,
-) -> LabRunResult:
-    """Load a lab directory (skill/manifest.yaml, sandbox/, script.yaml) and
-    run its scripted reference-agent steps through the runtime gateway.
+    agent_name: str = "reference-agent",
+) -> LabGatewaySetup:
+    """Everything `run_lab()` needs before it has a script to execute:
+    loads the sandbox, the manifest, the opt-in SKILL.md scan, the
+    behavioral baseline, and builds a real `RuntimeGateway` against all of
+    it. Pulled out on its own so any caller that wants to drive a lab's
+    actions *without* a scripted `script.yaml` -- `skillfence lab live`'s
+    MCP server dispatching real `tools/call` requests, for one -- gets the
+    exact same gateway construction a scripted run gets, not a
+    reimplementation that can drift from it.
     """
     lab_dir = lab_dir.resolve()
     manifest_path = lab_dir / "skill" / "manifest.yaml"
-    script_path = lab_dir / "script.yaml"
     if not manifest_path.exists():
         raise FileNotFoundError(f"no manifest.yaml at {manifest_path}")
-    if not script_path.exists():
-        raise FileNotFoundError(f"no script.yaml at {script_path}")
 
     sandbox = load_sandbox(lab_dir)
     manifest = CapabilityManifest.load(manifest_path, workspace=sandbox.root)
@@ -129,7 +141,7 @@ def run_lab(
         sandbox=sandbox,
         human_gate=human_gate,
         session_id=session_id,
-        agent="reference-agent",
+        agent=agent_name,
         skill=manifest.name,
         observe_mode=(mode == "observe"),
         policy_store=policy_store,
@@ -137,14 +149,42 @@ def run_lab(
         known_capability_tokens=frozenset(known_capability_tokens),
     )
 
-    agent = ReferenceAgent(gateway)
-    report = agent.run_script(script_path, invocation_number=invocation_number)
+    return LabGatewaySetup(
+        gateway=gateway,
+        session_id=session_id,
+        events_path=events_path,
+        invocation_number=invocation_number,
+    )
+
+
+def run_lab(
+    lab_dir: Path,
+    *,
+    decision: Optional[str] = None,
+    mode: str = "enforce",
+    console: Optional[Console] = None,
+    use_policy_store: bool = True,
+) -> LabRunResult:
+    """Load a lab directory (skill/manifest.yaml, sandbox/, script.yaml) and
+    run its scripted reference-agent steps through the runtime gateway.
+    """
+    lab_dir = lab_dir.resolve()
+    script_path = lab_dir / "script.yaml"
+    if not script_path.exists():
+        raise FileNotFoundError(f"no script.yaml at {script_path}")
+
+    setup = build_lab_gateway(
+        lab_dir, decision=decision, mode=mode, console=console, use_policy_store=use_policy_store
+    )
+
+    agent = ReferenceAgent(setup.gateway)
+    report = agent.run_script(script_path, invocation_number=setup.invocation_number)
 
     return LabRunResult(
-        session_id=session_id,
+        session_id=setup.session_id,
         report=report,
-        findings=gateway.findings,
-        events_path=events_path,
-        gateway=gateway,
-        invocation_number=invocation_number,
+        findings=setup.gateway.findings,
+        events_path=setup.events_path,
+        gateway=setup.gateway,
+        invocation_number=setup.invocation_number,
     )
