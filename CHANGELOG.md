@@ -17,6 +17,13 @@ All notable changes to SkillFence are documented here. Loosely follows
   current manifest's declared scope.
 
 ### Added
+- **Identity/memory persistence detection (AST01).** `write_file()` now
+  recognizes writes to conventional agent identity/memory files
+  (`MEMORY.md`, `AGENTS.md`, `CLAUDE.md`, `SOUL.md`, ...) as a distinct,
+  high-scoring risk factor, independent of whether the manifest happens to
+  declare write access to them — a future session reads these files back
+  as trusted context with no re-scanning, so planting an instruction here
+  compromises every session after this one, not just the current run.
 - **Progressive-disclosure detection (AST05).** `fetch_url()` now keeps a
   session-level history of every fetch's content and re-scans the
   concatenation of everything fetched so far, in addition to the existing

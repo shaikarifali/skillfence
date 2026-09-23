@@ -115,6 +115,16 @@ SCORE_HIDDEN_UNICODE_PAYLOAD = 30
 # already scores.
 SCORE_PROGRESSIVE_DISCLOSURE = 30
 
+# Identity/memory persistence: the write targets a file the agent host reads
+# back into trusted context on a *future* session (CLAUDE.md/AGENTS.md/
+# MEMORY.md/SOUL.md conventions) -- not a credential leak right now, but
+# planting an instruction the agent will treat as its own prior context next
+# time, with none of the fetch/instruction-detection scanning a poisoned
+# external document would get. Scored close to a sensitive-credential read:
+# a successful write here compromises every session after this one, not
+# just this run.
+SCORE_IDENTITY_FILE_WRITE = 40
+
 THRESHOLDS = (
     (29, Severity.LOW),
     (49, Severity.MEDIUM),
@@ -197,6 +207,7 @@ class RiskEngine:
         tool_description_changed: bool = False,
         hidden_unicode_payload: bool = False,
         progressive_disclosure_across_fetches: bool = False,
+        identity_persistence_attempt: bool = False,
     ) -> RiskAssessment:
         score = 0
         factors: list[str] = []
@@ -278,6 +289,11 @@ class RiskEngine:
             progressive_disclosure_across_fetches,
             SCORE_PROGRESSIVE_DISCLOSURE,
             "instruction only emerges once combined with an earlier, individually benign fetch (progressive disclosure)",
+        )
+        add(
+            identity_persistence_attempt,
+            SCORE_IDENTITY_FILE_WRITE,
+            "write targets a file the agent reads back as trusted context in a future session (identity/memory persistence)",
         )
 
         score = max(score, 0)

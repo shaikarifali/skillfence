@@ -28,6 +28,7 @@ from skillfence.hitl.decisions import DecisionRecord, DecisionRequest, DecisionT
 from skillfence.policy.engine import PolicyEngine, PolicyResult
 from skillfence.policy.manifest import CapabilityManifest
 from skillfence.policy.secret_scan import scan_for_secrets
+from skillfence.policy.sensitive import is_identity_file
 from skillfence.policy.store import PolicyStore
 from skillfence.provenance.graph import ProvenanceGraph
 from skillfence.risk.engine import RiskAssessment, RiskEngine
@@ -522,15 +523,31 @@ class RuntimeGateway:
         parent = parent_event or self.invoke_event_id
         policy_result = self.policy.evaluate_fs_write(path)
         escape = self.sandbox.escapes_root(path)
+        # AST01 (persistence): a write to a conventional agent identity/
+        # memory file (CLAUDE.md, AGENTS.md, MEMORY.md, SOUL.md, ...) isn't
+        # dangerous for what it exposes now -- it's dangerous because a
+        # future session reads it back as trusted context, unscanned, the
+        # same way AST05 content is untrusted except nothing here ever gets
+        # treated as untrusted at read time.
+        identity_write = is_identity_file(path)
+        if escape:
+            title = "Sandbox escape attempt"
+        elif identity_write:
+            title = "Write targets an agent identity/memory file"
+        else:
+            title = "Filesystem write outside declared capability"
+        ast_tags = self._ast_for(fs=True, sandbox_escape=escape)
+        if identity_write:
+            ast_tags = sorted({*ast_tags, "AST01"})
         self._enforce(
             event_type=EventType.FS_WRITE,
             resource=path,
             policy_result=policy_result,
             parent_event=parent,
             action_label="filesystem.write",
-            title="Sandbox escape attempt" if escape else "Filesystem write outside declared capability",
-            ast=self._ast_for(fs=True, sandbox_escape=escape),
-            extra_risk={"sandbox_escape_attempt": escape},
+            title=title,
+            ast=ast_tags,
+            extra_risk={"sandbox_escape_attempt": escape, "identity_persistence_attempt": identity_write},
         )
         if escape:
             return  # AST06: never actually write outside this lab's own sandbox root
