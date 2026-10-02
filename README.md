@@ -61,11 +61,10 @@ enforcement signal*.
 
 ## SkillFence + SkillFence-Lab
 
-SkillFence is the tool. **[SkillFence-Lab](https://github.com/shaikarifali/SkillFence-Lab) —
-SkillFence Lab** is a separate, companion repository: a
-deliberately vulnerable lab suite (built the way DVWA is built for web
-apps) that this runtime is built and benchmarked against — full OWASP
-Agentic Skills Top 10 coverage (AST01–AST10), 28 fully offline malicious
+SkillFence is the tool. **[SkillFence Lab](https://github.com/shaikarifali/SkillFence-Lab)**
+is a separate, companion repository: a deliberately vulnerable, fully
+offline lab suite that this runtime is built and benchmarked against —
+full OWASP Agentic Skills Top 10 coverage (AST01–AST10), 28 malicious
 labs plus a multi-category capstone and 3 benign controls, each with a
 machine-readable `ground-truth.yaml`.
 
