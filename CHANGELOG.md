@@ -5,6 +5,14 @@ All notable changes to SkillFence are documented here. Loosely follows
 
 ## [Unreleased]
 
+### Changed
+- **Renamed DVAS to SkillFence Lab** across the tool and the lab suite's own
+  repo: the `dvas` CLI alias is now `skillfence-lab`, the `DVAS_ROOT` env var
+  is now `SKILLFENCE_LAB_ROOT`, the default labs directory name is
+  `SkillFence-Lab`, and every doc/example/CI reference to the old name was
+  updated to match. No behavior changed — same `RuntimeGateway`, same
+  benchmark (28/28 malicious detected, 0/3 false positives, unchanged).
+
 ### Added
 - **`skillfence lab live`** — a real, connectable MCP server for one lab,
   so a real agent (Claude Desktop, Cline, the MCP Inspector) decides on
@@ -47,7 +55,7 @@ All notable changes to SkillFence are documented here. Loosely follows
 - **Progressive hints.** `skillfence lab hint <lab> [--level N]` reveals a
   lab's hints one at a time, in order, without spoiling the analysis; the
   Lab Explorer's lab pages get a matching "Stuck? Hints" section with the
-  same one-at-a-time reveal. Every runnable DVAS lab ships a `hints.md`.
+  same one-at-a-time reveal. Every runnable SkillFence-Lab lab ships a `hints.md`.
 - **Lab Explorer: a heraldic identity per OWASP chapter** — a distinct
   shield icon and color per category, a dedicated Chapter overview page
   (the real issue, the real fix, a real-world-evidence citation, and that
@@ -172,5 +180,5 @@ All notable changes to SkillFence are documented here. Loosely follows
 Initial release: the core runtime — policy engine, deterministic risk
 engine, correlation engine, human-in-the-loop CLI decision gate,
 JSONL audit log — covering AST01–AST05 against the companion
-[DVAS](https://github.com/shaikarifali/DVAS) lab suite (15/15 malicious
+[SkillFence-Lab](https://github.com/shaikarifali/SkillFence-Lab) lab suite (15/15 malicious
 labs detected, 0/2 false positives).

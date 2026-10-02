@@ -4,7 +4,7 @@ Puts SkillFence in front of a real MCP server. To the real client, this
 proxy *is* the MCP server. To `fake_server.py` (standing in for whatever
 real server you'd actually run), this proxy *is* the client. Every
 `tools/call` gets authorized through the same policy/risk/human-gate
-pipeline the DVAS labs use, before the real request is ever forwarded.
+pipeline the SkillFence-Lab labs use, before the real request is ever forwarded.
 
 ## Files
 
@@ -13,10 +13,10 @@ pipeline the DVAS labs use, before the real request is ever forwarded.
   `mystery_tool`. Every call it receives just echoes back a canned success
   — the point is proving whether SkillFence's proxy *let the call reach
   here at all*, not doing real work.
-- `manifest.yaml` — the same `CapabilityManifest` schema every DVAS lab
+- `manifest.yaml` — the same `CapabilityManifest` schema every SkillFence-Lab lab
   uses, declaring what this server's tools are allowed to touch: only
   `./reports/**`, no process execution, no network, no secrets.
-- `tool-map.yaml` — the piece a real MCP server needs that a DVAS lab
+- `tool-map.yaml` — the piece a real MCP server needs that a SkillFence-Lab lab
   doesn't: since a real server's tool names are arbitrary strings nothing
   in the MCP spec can interpret, this declares which of `fake_server.py`'s
   tool names correspond to which SkillFence action kind

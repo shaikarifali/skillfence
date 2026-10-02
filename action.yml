@@ -14,7 +14,7 @@ inputs:
       "run" (executes script.yaml through the real runtime gateway, needs
       --decision since CI has no human to prompt), or "bench" (scores
       every lab under path against its ground-truth.yaml — for a repo of
-      DVAS-style labs, not a single skill).
+      SkillFence-Lab-style labs, not a single skill).
     default: "inspect"
   decision:
     description: "mode=run only: the non-interactive decision forced at every gate"

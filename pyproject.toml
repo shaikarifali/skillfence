@@ -46,12 +46,12 @@ adk = ["google-adk>=1.0"]
 [project.urls]
 Homepage = "https://github.com/shaikarifali/skillfence"
 Repository = "https://github.com/shaikarifali/skillfence"
-Labs = "https://github.com/shaikarifali/DVAS"
+Labs = "https://github.com/shaikarifali/SkillFence-Lab"
 Issues = "https://github.com/shaikarifali/skillfence/issues"
 
 [project.scripts]
 skillfence = "skillfence.cli.main:app"
-dvas = "skillfence.cli.main:app"
+skillfence-lab = "skillfence.cli.main:app"
 
 [build-system]
 requires = ["setuptools>=68", "wheel"]

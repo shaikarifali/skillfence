@@ -60,7 +60,7 @@ class SecurityReport:
 
     def to_markdown(self) -> str:
         lines = [
-            f"# DVAS Security Assessment — {self.lab}",
+            f"# SkillFence-Lab Security Assessment — {self.lab}",
             "",
             f"**Skill:** {self.skill or '-'}  ",
             f"**Risk:** {self.risk.upper()}  ",
@@ -263,7 +263,7 @@ class SecurityReport:
 
     def to_text(self) -> str:
         lines = [
-            "DVAS Security Assessment",
+            "SkillFence-Lab Security Assessment",
             "",
             f"Skill:\n  {self.skill or '-'}",
             "",

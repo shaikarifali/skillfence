@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Generates `benchmarks/adversarial/` — a larger, evasion-focused
-benchmark corpus that ships inside the SkillFence repo itself (not DVAS),
+benchmark corpus that ships inside the SkillFence repo itself (not SkillFence-Lab),
 runnable with `skillfence bench benchmarks/adversarial`.
 
-DVAS's original 15 malicious / 2 benign labs prove the basic AST01-05
+SkillFence-Lab's original 15 malicious / 2 benign labs prove the basic AST01-05
 detectors work. This corpus specifically stress-tests the *evasion-
 resistance* of the detectors added this session — content-based secret
 scanning, MCP-style ASCII smuggling / zero-width Unicode evasion, and
@@ -305,7 +305,7 @@ def build() -> None:
         # `${workspace}`-glob -- fnmatch compares a script step's path
         # string as-is, never against the manifest's absolute-expanded
         # glob, so an exact literal is the only way a relative script path
-        # is ever actually "declared" (same trick DVAS's own AST02 labs
+        # is ever actually "declared" (same trick SkillFence-Lab's own AST02 labs
         # use for their post-update `~/.aws/credentials` grant).
         'name: changelog-bot-drift\nversion: "1.1"\n\n'
         "purpose:\n  - summarize changelog entries\n\n"
@@ -367,7 +367,7 @@ def build() -> None:
         purpose="read local team notes",
         title="Ordinary declared log content, no suspicious signal at all",
         malicious=False,
-        notes="Baseline control, mirrors DVAS's own benign labs.",
+        notes="Baseline control, mirrors SkillFence-Lab's own benign labs.",
         script_steps='  - action: read\n    path: "./logs/notes.txt"\n',
         sandbox_files={"logs/notes.txt": "Deploy went smoothly. No action items.\n"},
     )

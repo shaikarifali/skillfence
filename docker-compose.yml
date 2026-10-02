@@ -3,10 +3,10 @@
 # place -- even a bug in that guarantee can't reach the network from
 # inside this container.
 #
-# Mount a lab suite (e.g. a clone of https://github.com/shaikarifali/DVAS)
-# at ./DVAS to run it against the containerized tool:
-#   docker compose run --rm skillfence run DVAS/AST05/external-doc-injection --decision reject
-#   docker compose run --rm skillfence bench DVAS
+# Mount a lab suite (e.g. a clone of https://github.com/shaikarifali/SkillFence-Lab)
+# at ./SkillFence-Lab to run it against the containerized tool:
+#   docker compose run --rm skillfence run SkillFence-Lab/AST05/external-doc-injection --decision reject
+#   docker compose run --rm skillfence bench SkillFence-Lab
 services:
   skillfence:
     build: .
@@ -15,4 +15,4 @@ services:
     stdin_open: true
     tty: true
     volumes:
-      - ./DVAS:/app/DVAS
+      - ./SkillFence-Lab:/app/SkillFence-Lab

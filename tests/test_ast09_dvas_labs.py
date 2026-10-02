@@ -1,5 +1,5 @@
-"""AST09 (No Governance) DVAS labs. Structurally different from every other
-DVAS category: these are fleet directories (multiple skill/manifest.yaml
+"""AST09 (No Governance) SkillFence-Lab labs. Structurally different from every other
+SkillFence-Lab category: these are fleet directories (multiple skill/manifest.yaml
 subdirectories), graded by `skillfence.governance.inventory.build_inventory`
 instead of a single script.yaml's Finding outcome -- there is nothing for
 the single-shot ground-truth.yaml/bench harness to score here, matching
@@ -10,8 +10,8 @@ Uses `SKILLFENCE_POLICY_STORE` to point every `run_lab()` call at a
 tmp-local grants file, so this test never reads or writes the real
 org-wide store.
 
-Requires the DVAS lab suite (https://github.com/shaikarifali/DVAS) cloned
-alongside this repo, or DVAS_ROOT pointed at it — see test_labs.py.
+Requires the SkillFence-Lab lab suite (https://github.com/shaikarifali/SkillFence-Lab) cloned
+alongside this repo, or SKILLFENCE_LAB_ROOT pointed at it — see test_labs.py.
 """
 
 from __future__ import annotations
@@ -26,17 +26,17 @@ from skillfence.governance.inventory import build_inventory
 from skillfence.lab_runner import run_lab
 from skillfence.policy.store import PolicyStore
 
-DVAS_ROOT = Path(os.environ.get("DVAS_ROOT", str(Path(__file__).resolve().parents[1].parent / "DVAS")))
+SKILLFENCE_LAB_ROOT = Path(os.environ.get("SKILLFENCE_LAB_ROOT", str(Path(__file__).resolve().parents[1].parent / "SkillFence-Lab")))
 
 pytestmark = pytest.mark.skipif(
-    not DVAS_ROOT.is_dir(),
-    reason=f"DVAS lab suite not found at {DVAS_ROOT} — clone https://github.com/shaikarifali/DVAS "
-    "alongside this repo, or set DVAS_ROOT, to run these tests.",
+    not SKILLFENCE_LAB_ROOT.is_dir(),
+    reason=f"SkillFence-Lab lab suite not found at {SKILLFENCE_LAB_ROOT} — clone https://github.com/shaikarifali/SkillFence-Lab "
+    "alongside this repo, or set SKILLFENCE_LAB_ROOT, to run these tests.",
 )
 
 
 def _copy_fleet(tmp_path: Path, lab_name: str) -> Path:
-    source = DVAS_ROOT / "AST09" / lab_name / "fleet"
+    source = SKILLFENCE_LAB_ROOT / "AST09" / lab_name / "fleet"
     if not source.is_dir():
         pytest.skip(f"{source} not found")
     dest = tmp_path / "fleet"

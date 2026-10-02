@@ -1,10 +1,10 @@
-"""AST07 (Update Drift, behavioral-baseline variant) DVAS labs. Multi-run,
+"""AST07 (Update Drift, behavioral-baseline variant) SkillFence-Lab labs. Multi-run,
 so they can't use the single-shot ground-truth.yaml harness in
 test_labs.py: each one is clean on invocation 1 and gates on invocation 2,
 mirroring test_delayed_payload.py's convention.
 
-Requires the DVAS lab suite (https://github.com/shaikarifali/DVAS) cloned
-alongside this repo, or DVAS_ROOT pointed at it — see test_labs.py.
+Requires the SkillFence-Lab lab suite (https://github.com/shaikarifali/SkillFence-Lab) cloned
+alongside this repo, or SKILLFENCE_LAB_ROOT pointed at it — see test_labs.py.
 """
 
 from __future__ import annotations
@@ -17,17 +17,17 @@ import pytest
 
 from skillfence.lab_runner import run_lab
 
-DVAS_ROOT = Path(os.environ.get("DVAS_ROOT", str(Path(__file__).resolve().parents[1].parent / "DVAS")))
+SKILLFENCE_LAB_ROOT = Path(os.environ.get("SKILLFENCE_LAB_ROOT", str(Path(__file__).resolve().parents[1].parent / "SkillFence-Lab")))
 
 pytestmark = pytest.mark.skipif(
-    not DVAS_ROOT.is_dir(),
-    reason=f"DVAS lab suite not found at {DVAS_ROOT} — clone https://github.com/shaikarifali/DVAS "
-    "alongside this repo, or set DVAS_ROOT, to run these tests.",
+    not SKILLFENCE_LAB_ROOT.is_dir(),
+    reason=f"SkillFence-Lab lab suite not found at {SKILLFENCE_LAB_ROOT} — clone https://github.com/shaikarifali/SkillFence-Lab "
+    "alongside this repo, or set SKILLFENCE_LAB_ROOT, to run these tests.",
 )
 
 
 def _run_twice(tmp_path: Path, lab_name: str):
-    source_lab = DVAS_ROOT / "AST07" / lab_name
+    source_lab = SKILLFENCE_LAB_ROOT / "AST07" / lab_name
     if not source_lab.is_dir():
         pytest.skip(f"{source_lab} not found")
     lab_dir = tmp_path / lab_name

@@ -14,7 +14,7 @@ against a real client implementation. Install it to run this test:
     pytest tests/test_live_http.py
 
 If it isn't installed, this test skips rather than failing — same
-convention `test_labs.py` uses for an unavailable DVAS clone.
+convention `test_labs.py` uses for an unavailable SkillFence-Lab clone.
 """
 
 from __future__ import annotations
@@ -70,7 +70,7 @@ def test_real_mcp_client_completes_full_session(live_server):
         async with streamablehttp_client(url) as (read, write, get_session_id):
             async with ClientSession(read, write) as session:
                 init_result = await session.initialize()
-                assert init_result.serverInfo.name == "dvas-live-demo-skill"
+                assert init_result.serverInfo.name == "skillfence-lab-live-demo-skill"
                 assert "Live HTTP transport test skill" in (init_result.instructions or "")
                 assert get_session_id()  # a real session id was negotiated
 
@@ -96,6 +96,6 @@ def test_real_mcp_client_completes_full_session(live_server):
     asyncio.run(run())
 
     # the real gateway behind this session actually recorded the blocked
-    # attempt -- same audit trail every other DVAS lab produces
+    # attempt -- same audit trail every other SkillFence-Lab lab produces
     assert len(lab_server.gateway.findings) == 1
     assert lab_server.gateway.findings[0].status == "blocked"

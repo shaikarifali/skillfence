@@ -312,7 +312,7 @@ function shieldIcon(ast, size) {
 }
 
 // The issue/fix content for each chapter -- distilled from this suite's
-// own DVAS README (the "### The story" section + "Key Mitigation"/
+// own SkillFence-Lab README (the "### The story" section + "Key Mitigation"/
 // "Real-World Evidence" columns for each AST category), not generic OWASP
 // boilerplate. Reference/documentation content, same status as CATEGORIES
 // and CHAPTERS above -- not "live" lab data, but not staged either.

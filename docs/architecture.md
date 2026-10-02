@@ -7,7 +7,7 @@ Every wrapped tool call funnels through one enforcement point —
 
 ```mermaid
 flowchart TD
-    A[Agent + Agentic Skill] -->|read/write/exec/fetch/network_send| B[DVAS Runtime Gateway]
+    A[Agent + Agentic Skill] -->|read/write/exec/fetch/network_send| B[SkillFence-Lab Runtime Gateway]
     B --> C[Normalize to Event]
     C --> D[Event Bus + JSONL audit log]
     D --> E[Policy Engine<br/>declared vs requested]
@@ -44,7 +44,7 @@ flowchart LR
 
 This is the flagship AST05 lab's actual provenance chain
 (`AST05/external-doc-injection` in the
-[DVAS](https://github.com/shaikarifali/DVAS) lab suite) — shown to the
+[SkillFence-Lab](https://github.com/shaikarifali/SkillFence-Lab) lab suite) — shown to the
 human on `[i] Inspect provenance` before they decide.
 
 ## Module map

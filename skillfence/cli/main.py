@@ -30,14 +30,14 @@ from skillfence.storage.jsonl_store import append_jsonl, read_jsonl
 QUICKSTART = """\
 Quick start — the pre-built labs:
   skillfence lab list                                   # see every lab, its AST category, and what it does
-  skillfence run DVAS/AST05/external-doc-injection       # run one, live (you'll get a decision prompt)
-  skillfence findings DVAS/AST05/external-doc-injection  # see the recorded evidence
+  skillfence run SkillFence-Lab/AST05/external-doc-injection       # run one, live (you'll get a decision prompt)
+  skillfence findings SkillFence-Lab/AST05/external-doc-injection  # see the recorded evidence
   skillfence bench                                       # score every lab against its known-correct answer
   skillfence learn                                       # guided menu — pick a lab, see its mission, run it
   skillfence policy list                                 # see every remembered approval (org-wide)
-  skillfence inventory DVAS                              # fleet-wide governance report (never-reviewed skills, ungoverned grants)
-  skillfence lab ui DVAS                                 # live web UI -- browse every lab and run one from the browser
-  skillfence lab hint DVAS/AST05/external-doc-injection  # stuck? reveal one hint at a time with --level
+  skillfence inventory SkillFence-Lab                              # fleet-wide governance report (never-reviewed skills, ungoverned grants)
+  skillfence lab ui SkillFence-Lab                                 # live web UI -- browse every lab and run one from the browser
+  skillfence lab hint SkillFence-Lab/AST05/external-doc-injection  # stuck? reveal one hint at a time with --level
 
 Quick start — checking YOUR OWN skill:
   skillfence inspect path/to/your-skill                  # static check, needs only skill/manifest.yaml
@@ -67,7 +67,7 @@ telemetry_app = typer.Typer(add_completion=False, help="Correlate OS-level (audi
 app.add_typer(telemetry_app, name="telemetry")
 console = Console()
 
-DEFAULT_LABS_ROOT = Path("DVAS")
+DEFAULT_LABS_ROOT = Path("SkillFence-Lab")
 
 
 def _runs_dir(lab_dir: Path) -> Path:
@@ -75,7 +75,7 @@ def _runs_dir(lab_dir: Path) -> Path:
 
 
 def _resolve_lab(lab: Path, labs_root: Path = DEFAULT_LABS_ROOT) -> Path:
-    """Accept either a real lab directory or an AST shorthand (e.g. `dvas run
+    """Accept either a real lab directory or an AST shorthand (e.g. `skillfence-lab run
     ast01`). Falls back to the literal path for `run_lab` to fail on if
     neither resolves, so error messages stay accurate.
     """
@@ -101,12 +101,12 @@ def _resolve_lab(lab: Path, labs_root: Path = DEFAULT_LABS_ROOT) -> Path:
 
 RUN_EXAMPLES = """\
 Examples:
-  skillfence run DVAS/AST05/external-doc-injection                    # live — you get the decision prompt
-  skillfence run DVAS/AST01/credential-reader --decision reject        # non-interactive (CI, scripting)
+  skillfence run SkillFence-Lab/AST05/external-doc-injection                    # live — you get the decision prompt
+  skillfence run SkillFence-Lab/AST01/credential-reader --decision reject        # non-interactive (CI, scripting)
   skillfence run ast04                                                 # AST shorthand, if only one lab matches
-  skillfence run DVAS/AST01/credential-reader --mode observe           # log everything, block nothing
-  skillfence run DVAS/AST01/credential-reader --decision allow_scoped  # approve + remember this exact action
-  skillfence run DVAS/AST01/credential-reader --fresh                  # ignore any remembered approvals
+  skillfence run SkillFence-Lab/AST01/credential-reader --mode observe           # log everything, block nothing
+  skillfence run SkillFence-Lab/AST01/credential-reader --decision allow_scoped  # approve + remember this exact action
+  skillfence run SkillFence-Lab/AST01/credential-reader --fresh                  # ignore any remembered approvals
   skillfence run examples/my-first-skill                               # your own skill — copy that directory to start
 """
 
@@ -115,7 +115,7 @@ Examples:
 def run(
     lab: Path = typer.Argument(
         ...,
-        help="Path to a skill directory — a DVAS lab, or your own skill "
+        help="Path to a skill directory — a SkillFence-Lab lab, or your own skill "
         "(needs skill/manifest.yaml and script.yaml; see examples/my-first-skill)",
     ),
     decision: Optional[str] = typer.Option(
@@ -186,7 +186,7 @@ def run(
 
 @lab_app.command(
     "list",
-    epilog="Examples:\n  skillfence lab list\n  skillfence lab list DVAS/AST01   # scope to one AST category\n",
+    epilog="Examples:\n  skillfence lab list\n  skillfence lab list SkillFence-Lab/AST01   # scope to one AST category\n",
 )
 def lab_list(
     labs_root: Path = typer.Argument(DEFAULT_LABS_ROOT, help="Root directory to scan for skill/manifest.yaml"),
@@ -213,7 +213,7 @@ def lab_list(
 
 @lab_app.command(
     "ui",
-    epilog="Examples:\n  skillfence lab ui DVAS\n  skillfence lab ui DVAS --port 9000\n  skillfence lab ui DVAS --no-browser\n",
+    epilog="Examples:\n  skillfence lab ui SkillFence-Lab\n  skillfence lab ui SkillFence-Lab --port 9000\n  skillfence lab ui SkillFence-Lab --no-browser\n",
 )
 def lab_ui(
     labs_root: Path = typer.Argument(DEFAULT_LABS_ROOT, help="Root directory to scan for skill/manifest.yaml"),
@@ -251,7 +251,7 @@ def lab_ui(
 
 @lab_app.command(
     "hint",
-    epilog="Examples:\n  skillfence lab hint DVAS/AST05/external-doc-injection\n  skillfence lab hint ast05 --level 2\n",
+    epilog="Examples:\n  skillfence lab hint SkillFence-Lab/AST05/external-doc-injection\n  skillfence lab hint ast05 --level 2\n",
 )
 def lab_hint(
     lab: Path = typer.Argument(..., help="Path to a lab directory, or an AST shorthand (e.g. ast05)"),
@@ -280,7 +280,7 @@ def lab_hint(
 
 LAB_LIVE_EXAMPLES = """\
 Examples:
-  skillfence lab live DVAS/AST05/external-doc-injection
+  skillfence lab live SkillFence-Lab/AST05/external-doc-injection
   skillfence lab live ast05 --port 8901 --decision reject
 
 Then connect a real MCP client to http://127.0.0.1:<port>/mcp (Streamable
@@ -345,19 +345,19 @@ def lab_live(
 
 
 @app.command(
-    epilog="Examples:\n  skillfence inspect DVAS/AST03/unauthorized-network\n  skillfence inspect ast03\n"
+    epilog="Examples:\n  skillfence inspect SkillFence-Lab/AST03/unauthorized-network\n  skillfence inspect ast03\n"
     "  skillfence inspect examples/my-first-skill   # works on any skill/manifest.yaml, not just labs\n"
 )
 def inspect(
     lab: Path = typer.Argument(
         ...,
-        help="Path to any skill directory with a skill/manifest.yaml — a DVAS lab, an AST "
+        help="Path to any skill directory with a skill/manifest.yaml — a SkillFence-Lab lab, an AST "
         "shorthand (e.g. ast03), or your own skill",
     ),
 ):
     """Static-only inspection — read the skill's declared manifest and
     purpose. Does not execute the skill or touch the sandbox. Works on any
-    skill that ships a skill/manifest.yaml, not just DVAS labs — this is the
+    skill that ships a skill/manifest.yaml, not just SkillFence-Lab labs — this is the
     entry point for checking a skill you did not write yourself."""
     lab = _resolve_lab(lab)
     manifest_path = lab / "skill" / "manifest.yaml"
@@ -399,7 +399,7 @@ def inspect(
 
 
 @app.command(
-    epilog="Examples:\n  skillfence inventory DVAS\n  skillfence inventory fleet/ --all\n"
+    epilog="Examples:\n  skillfence inventory SkillFence-Lab\n  skillfence inventory fleet/ --all\n"
 )
 def inventory(
     root: Path = typer.Argument(
@@ -451,7 +451,7 @@ def inventory(
         )
 
 
-@app.command(epilog="Examples:\n  skillfence observe DVAS/AST05/external-doc-injection\n")
+@app.command(epilog="Examples:\n  skillfence observe SkillFence-Lab/AST05/external-doc-injection\n")
 def observe(
     lab: Path = typer.Argument(..., help="Path to a lab directory (or an AST shorthand, e.g. ast03)"),
     fresh: bool = typer.Option(False, "--fresh", help="Ignore the shared, org-wide policy store for this run."),
@@ -464,8 +464,8 @@ def observe(
 
 
 @app.command(
-    epilog="Examples:\n  skillfence protect DVAS/AST01/credential-reader\n"
-    "  skillfence protect DVAS/AST01/credential-reader --decision reject   # non-interactive\n"
+    epilog="Examples:\n  skillfence protect SkillFence-Lab/AST01/credential-reader\n"
+    "  skillfence protect SkillFence-Lab/AST01/credential-reader --decision reject   # non-interactive\n"
 )
 def protect(
     lab: Path = typer.Argument(..., help="Path to a lab directory (or an AST shorthand, e.g. ast03)"),
@@ -617,11 +617,11 @@ def policy_compile_apparmor(
 
 
 @app.command(
-    epilog="Examples:\n  skillfence report DVAS/AST05/external-doc-injection\n"
-    "  skillfence report DVAS/AST05/external-doc-injection --json\n"
-    "  skillfence report DVAS/AST05/external-doc-injection --markdown\n"
-    "  skillfence report DVAS/AST05/external-doc-injection --sarif > results.sarif   # for github/codeql-action/upload-sarif\n"
-    "  skillfence report DVAS/AST05/external-doc-injection --html > report.html      # shareable, open in any browser\n"
+    epilog="Examples:\n  skillfence report SkillFence-Lab/AST05/external-doc-injection\n"
+    "  skillfence report SkillFence-Lab/AST05/external-doc-injection --json\n"
+    "  skillfence report SkillFence-Lab/AST05/external-doc-injection --markdown\n"
+    "  skillfence report SkillFence-Lab/AST05/external-doc-injection --sarif > results.sarif   # for github/codeql-action/upload-sarif\n"
+    "  skillfence report SkillFence-Lab/AST05/external-doc-injection --html > report.html      # shareable, open in any browser\n"
 )
 def report(
     lab: Path = typer.Argument(..., help="Path to a lab directory previously run with `skillfence run`"),
@@ -652,8 +652,8 @@ def report(
 
 
 @app.command(
-    epilog="Examples:\n  skillfence profile DVAS/AST01/credential-reader\n"
-    "  skillfence profile DVAS/AST01/credential-reader --json\n"
+    epilog="Examples:\n  skillfence profile SkillFence-Lab/AST01/credential-reader\n"
+    "  skillfence profile SkillFence-Lab/AST01/credential-reader --json\n"
 )
 def profile(
     lab: Path = typer.Argument(..., help="Path to a lab or skill directory previously run with `skillfence run`/`observe`"),
@@ -682,7 +682,7 @@ def profile(
 
 
 @app.command(
-    epilog="Examples:\n  skillfence dashboard DVAS\n  skillfence dashboard .skillfence/mcp --port 9000\n"
+    epilog="Examples:\n  skillfence dashboard SkillFence-Lab\n  skillfence dashboard .skillfence/mcp --port 9000\n"
     "  skillfence dashboard . --no-browser\n"
 )
 def dashboard(
@@ -738,7 +738,7 @@ def learn(
         console.print(f"[yellow]No malicious labs found under {labs_root}[/yellow]")
         raise typer.Exit(0)
 
-    console.rule("[bold]Damn Vulnerable Agentic Skills[/bold]")
+    console.rule("[bold]SkillFence Lab[/bold]")
     for idx, info in enumerate(infos, start=1):
         console.print(f"[{idx}] {info.ast} — {info.title or info.name}")
     console.print(f"[0] quit")
@@ -758,9 +758,9 @@ def learn(
     run(lab=info.dir, decision=None, mode="enforce", fresh=False)
 
 
-@app.command(epilog="Examples:\n  skillfence bench\n  skillfence bench DVAS/AST01   # scope to one AST category\n")
+@app.command(epilog="Examples:\n  skillfence bench\n  skillfence bench SkillFence-Lab/AST01   # scope to one AST category\n")
 def bench(
-    labs_root: Path = typer.Argument(Path("DVAS"), help="Root directory to scan for */ground-truth.yaml"),
+    labs_root: Path = typer.Argument(Path("SkillFence-Lab"), help="Root directory to scan for */ground-truth.yaml"),
 ):
     """Run every lab with an auto-reject decision and score against its
     ground-truth.yaml — detection rate on malicious labs, false-positive
@@ -770,7 +770,7 @@ def bench(
         console.print(f"[yellow]No ground-truth.yaml found under {labs_root}[/yellow]")
         raise typer.Exit(0)
 
-    table = Table(title="DVAS-Bench")
+    table = Table(title="SkillFence-Lab-Bench")
     table.add_column("Lab")
     table.add_column("Ground truth")
     table.add_column("Findings")
@@ -822,7 +822,7 @@ def bench(
 
 
 @app.command(
-    epilog="Examples:\n  skillfence findings DVAS/AST05/external-doc-injection\n"
+    epilog="Examples:\n  skillfence findings SkillFence-Lab/AST05/external-doc-injection\n"
     "  skillfence findings .skillfence/mcp/mcp-a1b2c3d4.findings.jsonl   # a specific mcp-proxy session\n"
 )
 def findings(
@@ -864,7 +864,7 @@ def _explain(row: dict) -> str:
 
 @app.command(
     epilog="Examples:\n"
-    "  skillfence replay DVAS/AST05/external-doc-injection/.runs/<session>.events.jsonl\n"
+    "  skillfence replay SkillFence-Lab/AST05/external-doc-injection/.runs/<session>.events.jsonl\n"
 )
 def replay(
     events_file: Path = typer.Argument(..., help="A *.events.jsonl file produced by a previous `skillfence run`"),
@@ -917,7 +917,7 @@ def mcp_proxy_cmd(
     (Claude Code, or any MCP-speaking agent) this proxy IS the MCP server;
     to the real downstream server, this proxy IS the client. Every
     `tools/call` is authorized through the same policy/risk/human-gate
-    pipeline the DVAS labs use before the real request is ever forwarded —
+    pipeline the SkillFence-Lab labs use before the real request is ever forwarded —
     everything else passes through unmodified. HIGH/CRITICAL actions
     fail-safe deny by default (no interactive TTY is available on a shared
     stdio channel) — pre-authorize expected actions with
@@ -962,7 +962,7 @@ def audit_keygen(
 @audit_app.command(
     "sign",
     epilog="Examples:\n"
-    "  skillfence audit sign DVAS/AST05/external-doc-injection/.runs/findings.jsonl\n"
+    "  skillfence audit sign SkillFence-Lab/AST05/external-doc-injection/.runs/findings.jsonl\n"
     "  skillfence audit sign .skillfence/mcp/mcp-abc123.findings.jsonl\n",
 )
 def audit_sign(
@@ -988,7 +988,7 @@ def audit_sign(
 @audit_app.command(
     "verify",
     epilog="Examples:\n"
-    "  skillfence audit verify DVAS/AST05/external-doc-injection/.runs/findings.jsonl\n"
+    "  skillfence audit verify SkillFence-Lab/AST05/external-doc-injection/.runs/findings.jsonl\n"
     "  skillfence audit verify findings.jsonl --public-key colleague-public-key.pub\n",
 )
 def audit_verify(
@@ -1013,7 +1013,7 @@ def audit_verify(
 @telemetry_app.command(
     "correlate",
     epilog="Examples:\n"
-    "  skillfence telemetry correlate DVAS/AST01/credential-reader/.runs/<session>.events.jsonl /var/log/audit/audit.log\n"
+    "  skillfence telemetry correlate SkillFence-Lab/AST01/credential-reader/.runs/<session>.events.jsonl /var/log/audit/audit.log\n"
     "  skillfence telemetry correlate .skillfence/mcp/<session>.events.jsonl audit-window.log --pid 4821\n"
     "  ausearch -k skillfence --format raw | skillfence telemetry correlate <session>.events.jsonl -\n",
 )
@@ -1029,7 +1029,7 @@ def telemetry_correlate(
     access can act entirely outside that boundary. This correlates an
     existing OS-level telemetry source (Linux `auditd` — not a bespoke
     SkillFence syscall monitor; wraps a mature, already-deployed tool the
-    same way `bench` wraps DVAS) against this session's own event log, and
+    same way `bench` wraps SkillFence-Lab) against this session's own event log, and
     reports anything auditd saw that SkillFence's instrumented layer never
     did. Matching is name/path-suffix based, not exact — a lead worth
     review, not a deterministic verdict like the rest of this tool's

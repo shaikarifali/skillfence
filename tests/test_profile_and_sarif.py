@@ -1,5 +1,5 @@
 """Tests for `skillfence profile` and `skillfence report --sarif`. Uses one
-real DVAS lab as a fixture (same DVAS_ROOT convention as test_labs.py) since
+real SkillFence-Lab lab as a fixture (same SKILLFENCE_LAB_ROOT convention as test_labs.py) since
 both features are consolidations over real run history, not something
 meaningfully testable against a synthetic zero-history skill alone.
 """
@@ -18,13 +18,13 @@ from skillfence.reporting.security_report import build_report
 from skillfence.reporting.skill_profile import build_profile
 from skillfence.storage.jsonl_store import append_jsonl
 
-DVAS_ROOT = Path(os.environ.get("DVAS_ROOT", str(Path(__file__).resolve().parents[1].parent / "DVAS")))
-_LAB = DVAS_ROOT / "AST01" / "credential-reader"
+SKILLFENCE_LAB_ROOT = Path(os.environ.get("SKILLFENCE_LAB_ROOT", str(Path(__file__).resolve().parents[1].parent / "SkillFence-Lab")))
+_LAB = SKILLFENCE_LAB_ROOT / "AST01" / "credential-reader"
 
 pytestmark = pytest.mark.skipif(
     not _LAB.is_dir(),
-    reason=f"DVAS lab suite not found at {DVAS_ROOT} — clone https://github.com/shaikarifali/DVAS "
-    "alongside this repo, or set DVAS_ROOT, to run these tests.",
+    reason=f"SkillFence-Lab lab suite not found at {SKILLFENCE_LAB_ROOT} — clone https://github.com/shaikarifali/SkillFence-Lab "
+    "alongside this repo, or set SKILLFENCE_LAB_ROOT, to run these tests.",
 )
 
 

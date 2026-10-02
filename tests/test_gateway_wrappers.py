@@ -1,9 +1,9 @@
-"""Direct, DVAS-independent tests of RuntimeGateway's wrapper methods
+"""Direct, SkillFence-Lab-independent tests of RuntimeGateway's wrapper methods
 (read_file/write_file/execute_shell/authorize). These exist specifically
 so a bug in the AST tagging or risk-factor wiring — like `_ast_for()`
 raising `TypeError` on a bad kwarg, the kind of regression that only
 shows up when a real lab actually runs — gets caught fast, without
-needing a DVAS checkout at all.
+needing a SkillFence-Lab checkout at all.
 """
 
 from __future__ import annotations
@@ -88,7 +88,7 @@ def test_write_file_escape_attempt_does_not_raise_and_never_touches_real_path(tm
 def test_read_file_within_sandbox_is_not_tagged_ast06(tmp_path: Path):
     gateway = _make_gateway(tmp_path)
     # undeclared AND recognized-sensitive (matches the same convention every
-    # DVAS lab uses) so this genuinely gates -- but the resolved path still
+    # SkillFence-Lab lab uses) so this genuinely gates -- but the resolved path still
     # lands inside the sandbox root, so it must never carry AST06.
     with pytest.raises(ActionBlocked) as excinfo:
         gateway.read_file("~/.aws/credentials")

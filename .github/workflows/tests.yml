@@ -18,12 +18,12 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      # DVAS is a separate repo (github.com/shaikarifali/DVAS) this runtime
+      # SkillFence-Lab is a separate repo (github.com/shaikarifali/SkillFence-Lab) this runtime
       # is benchmarked against — the lab-driven tests skip gracefully when
       # it's absent, but CI should actually run them, not just confirm they
       # skip cleanly.
-      - name: Clone DVAS
-        run: git clone --depth 1 https://github.com/shaikarifali/DVAS ../DVAS
+      - name: Clone SkillFence-Lab
+        run: git clone --depth 1 https://github.com/shaikarifali/SkillFence-Lab ../SkillFence-Lab
 
       - name: Install
         run: pip install -e .
@@ -37,8 +37,8 @@ jobs:
       - name: pytest
         run: python -m pytest -q
 
-      - name: Benchmark — DVAS (28/28 malicious detected, 0/3 false positives expected)
-        run: skillfence bench ../DVAS
+      - name: Benchmark — SkillFence-Lab (28/28 malicious detected, 0/3 false positives expected)
+        run: skillfence bench ../SkillFence-Lab
 
       - name: Benchmark — adversarial/evasion corpus (12/12 detected, 0/5 false positives expected)
         run: skillfence bench benchmarks/adversarial

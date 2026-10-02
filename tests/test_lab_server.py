@@ -44,7 +44,7 @@ def test_initialize_surfaces_skill_md_as_instructions(tmp_path: Path):
     result = server.handle_initialize({"protocolVersion": "2025-06-18"})
     assert result["protocolVersion"] == "2025-06-18"
     assert "Live Mode dispatch tests" in result["instructions"]
-    assert result["serverInfo"]["name"] == "dvas-live-demo-skill"
+    assert result["serverInfo"]["name"] == "skillfence-lab-live-demo-skill"
 
 
 def test_initialize_falls_back_to_a_default_protocol_version_if_none_sent(tmp_path: Path):

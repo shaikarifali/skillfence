@@ -1,6 +1,6 @@
-# Live Mode — connect a real agent to a DVAS lab
+# Live Mode — connect a real agent to a SkillFence-Lab lab
 
-Every DVAS lab normally runs through a deterministic, scripted
+Every SkillFence-Lab lab normally runs through a deterministic, scripted
 "reference agent" (`skillfence run`) — correct for `skillfence bench`,
 where the same script has to produce the same result every time, but it
 means nothing about the run is *actually* driven by an LLM's own
@@ -16,7 +16,7 @@ different is *who's deciding to call the tool in the first place*.
 ## Start a lab live
 
 ```bash
-skillfence lab live DVAS/AST05/external-doc-injection
+skillfence lab live SkillFence-Lab/AST05/external-doc-injection
 ```
 
 This binds to `127.0.0.1` on a free port (pick one explicitly with
@@ -52,7 +52,7 @@ needed. Add to Cline's MCP settings (`cline_mcp_settings.json`):
 ```json
 {
   "mcpServers": {
-    "dvas-live": {
+    "skillfence-lab-live": {
       "type": "streamableHttp",
       "url": "http://127.0.0.1:<port>/mcp"
     }
@@ -69,7 +69,7 @@ already-running HTTP server needs the
 ```json
 {
   "mcpServers": {
-    "dvas-live": {
+    "skillfence-lab-live": {
       "command": "npx",
       "args": ["mcp-remote", "http://127.0.0.1:<port>/mcp"]
     }

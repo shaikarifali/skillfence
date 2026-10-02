@@ -1,6 +1,6 @@
 """Integration test for AST07's behavioral-baseline variant end-to-end --
 `lab_runner.run_lab()` -> `fingerprint.behavior.load_prior_tokens()` ->
-`RuntimeGateway` -- against a synthetic, DVAS-independent lab directory (no
+`RuntimeGateway` -- against a synthetic, SkillFence-Lab-independent lab directory (no
 external checkout required). Multi-invocation by nature (there's nothing to
 have a "baseline" against on a single run), so this mirrors
 `test_delayed_payload.py`'s style rather than the single-shot

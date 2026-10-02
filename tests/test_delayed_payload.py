@@ -3,8 +3,8 @@ single-shot ground-truth.yaml harness in test_labs.py: run the lab three
 times against an isolated copy and assert invocations 1-2 are clean while
 invocation 3+ gates on the credential read.
 
-Requires the DVAS lab suite (https://github.com/shaikarifali/DVAS) cloned
-alongside this repo, or DVAS_ROOT pointed at it — see test_labs.py.
+Requires the SkillFence-Lab lab suite (https://github.com/shaikarifali/SkillFence-Lab) cloned
+alongside this repo, or SKILLFENCE_LAB_ROOT pointed at it — see test_labs.py.
 """
 
 from __future__ import annotations
@@ -17,13 +17,13 @@ import pytest
 
 from skillfence.lab_runner import run_lab
 
-DVAS_ROOT = Path(os.environ.get("DVAS_ROOT", str(Path(__file__).resolve().parents[1].parent / "DVAS")))
-SOURCE_LAB = DVAS_ROOT / "AST01" / "delayed-payload"
+SKILLFENCE_LAB_ROOT = Path(os.environ.get("SKILLFENCE_LAB_ROOT", str(Path(__file__).resolve().parents[1].parent / "SkillFence-Lab")))
+SOURCE_LAB = SKILLFENCE_LAB_ROOT / "AST01" / "delayed-payload"
 
 pytestmark = pytest.mark.skipif(
     not SOURCE_LAB.is_dir(),
-    reason=f"DVAS lab suite not found at {DVAS_ROOT} — clone https://github.com/shaikarifali/DVAS "
-    "alongside this repo, or set DVAS_ROOT, to run this test.",
+    reason=f"SkillFence-Lab lab suite not found at {SKILLFENCE_LAB_ROOT} — clone https://github.com/shaikarifali/SkillFence-Lab "
+    "alongside this repo, or set SKILLFENCE_LAB_ROOT, to run this test.",
 )
 
 

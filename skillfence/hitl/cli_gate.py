@@ -38,7 +38,7 @@ class HumanGate:
         auto_decider: Optional[AutoDecider] = None,
     ) -> None:
         """`auto_decider`, when set, answers decision requests without a TTY —
-        used by DVAS/tests/replay so the whole pipeline stays scriptable while
+        used by SkillFence-Lab/tests/replay so the whole pipeline stays scriptable while
         keeping a real human as the default path for a live demo.
         """
         self.console = console or Console()

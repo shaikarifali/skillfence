@@ -1,5 +1,5 @@
 """Unit + live-server tests for the Lab Explorer (`skillfence lab ui`).
-Builds a synthetic, DVAS-independent lab directory (no external checkout
+Builds a synthetic, SkillFence-Lab-independent lab directory (no external checkout
 required) so this exercises the real data layer and a real bound HTTP
 server end-to-end, the same way `skillfence run`/`lab list` would see it.
 """

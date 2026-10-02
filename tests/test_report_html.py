@@ -1,4 +1,4 @@
-"""Tests for `SecurityReport.to_html()` — synthetic, DVAS-independent.
+"""Tests for `SecurityReport.to_html()` — synthetic, SkillFence-Lab-independent.
 
 Finding text ultimately traces back to something a skill or a fetched
 document "said" (a title, a resource path, a why-flagged reason). In a

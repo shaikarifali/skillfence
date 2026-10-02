@@ -144,7 +144,7 @@ def test_undeclared_sensitive_read_fails_safe_denied(tmp_path: Path, monkeypatch
 def test_undeclared_process_exec_alone_is_low_risk_and_allowed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     # An isolated undeclared process.execute scores only "undeclared
     # capability" (+20) -- LOW, auto-allowed -- exactly like the existing
-    # DVAS AST03 labs, where process execution alone only escalates when
+    # SkillFence-Lab AST03 labs, where process execution alone only escalates when
     # combined with another factor (a sensitive read, an instruction,
     # egress). This proxy makes the same deterministic call a lab run
     # would, not a stricter one just because the target is real.

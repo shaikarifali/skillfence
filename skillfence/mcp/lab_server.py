@@ -1,6 +1,6 @@
-"""Live Mode — a real, connectable MCP server for one DVAS lab.
+"""Live Mode — a real, connectable MCP server for one SkillFence-Lab lab.
 
-Every other DVAS lab runs `script.yaml` through `ReferenceAgent`, a
+Every other SkillFence-Lab lab runs `script.yaml` through `ReferenceAgent`, a
 deterministic stand-in for what a real LLM agent would do (see
 `skillfence/adapters/reference_agent.py`). That's correct for
 `skillfence bench` — a benchmark needs the same script to produce the
@@ -41,7 +41,7 @@ from skillfence.runtime.gateway import ActionBlocked, RuntimeGateway
 # fallback is only used for a client that (unusually) sends none.
 FALLBACK_PROTOCOL_VERSION = "2025-06-18"
 
-# The six actions every DVAS lab's script.yaml already speaks
+# The six actions every SkillFence-Lab lab's script.yaml already speaks
 # (skillfence/adapters/reference_agent.py's own dispatch table), exposed
 # generically rather than with per-lab story-flavored names -- every lab
 # that already has a compatible manifest.yaml and sandbox/ works here with
@@ -150,7 +150,7 @@ class LabMCPServer:
         return {
             "protocolVersion": params.get("protocolVersion") or FALLBACK_PROTOCOL_VERSION,
             "capabilities": {"tools": {}},
-            "serverInfo": {"name": f"dvas-live-{self.gateway.skill}", "version": "0.1"},
+            "serverInfo": {"name": f"skillfence-lab-live-{self.gateway.skill}", "version": "0.1"},
             "instructions": self.instructions,
         }
 

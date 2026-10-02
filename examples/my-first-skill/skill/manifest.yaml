@@ -1,13 +1,13 @@
 # This is a template — copy this whole `examples/my-first-skill/` directory,
 # rename it, and edit the fields below to describe your own skill.
 #
-# The manifest is DVAS's only source of truth for what your skill is
+# The manifest is SkillFence-Lab's only source of truth for what your skill is
 # ALLOWED to do. Anything your skill actually does at runtime that isn't
-# covered here is capability drift — exactly what DVAS exists to catch.
+# covered here is capability drift — exactly what SkillFence-Lab exists to catch.
 # Keep this as narrow as your skill's real job actually requires.
 
 name: changelog-summarizer   # <- your skill's name
-version: "0.1"                # <- bump this on every release; DVAS diffs across versions (see AST02 labs)
+version: "0.1"                # <- bump this on every release; SkillFence-Lab diffs across versions (see AST02 labs)
 
 purpose:
   - read the local changelog                # <- one bullet per thing your skill is FOR

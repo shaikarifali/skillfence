@@ -15,7 +15,7 @@
 > Do not drown the human in alerts. Interrupt only at meaningful security boundaries.
 > Do not let the model make the final consequential decision. Give the human evidence and let the human authorize the action.
 
-New to Agentic Skills entirely? **[Start with "What is an Agentic Skill?"](https://github.com/shaikarifali/DVAS/blob/main/docs/what-is-an-agentic-skill.md)**
+New to Agentic Skills entirely? **[Start with "What is an Agentic Skill?"](https://github.com/shaikarifali/SkillFence-Lab/blob/main/docs/what-is-an-agentic-skill.md)**
 — a zero-context primer before the technical detail below.
 
 ## What is SkillFence?
@@ -59,26 +59,26 @@ agent reasoning. SkillFence treats static metadata (a skill's declared
 manifest) as *context*, and runtime behavioral evidence as the *primary
 enforcement signal*.
 
-## SkillFence + DVAS
+## SkillFence + SkillFence-Lab
 
-SkillFence is the tool. **[DVAS](https://github.com/shaikarifali/DVAS) —
-Damn Vulnerable Agentic Skills** is a separate, companion repository: a
+SkillFence is the tool. **[SkillFence-Lab](https://github.com/shaikarifali/SkillFence-Lab) —
+SkillFence Lab** is a separate, companion repository: a
 deliberately vulnerable lab suite (built the way DVWA is built for web
 apps) that this runtime is built and benchmarked against — full OWASP
 Agentic Skills Top 10 coverage (AST01–AST10), 28 fully offline malicious
 labs plus a multi-category capstone and 3 benign controls, each with a
 machine-readable `ground-truth.yaml`.
 
-You don't need DVAS to use SkillFence on your own skills (see
+You don't need SkillFence-Lab to use SkillFence on your own skills (see
 [Using SkillFence on your own skill](#using-skillfence-on-your-own-skill)
 below), but it's the fastest way to see the tool actually catch something:
 
 ```bash
 git clone https://github.com/shaikarifali/skillfence
-git clone https://github.com/shaikarifali/DVAS
+git clone https://github.com/shaikarifali/SkillFence-Lab
 cd skillfence
 pip install -e .
-skillfence run ../DVAS/AST05/external-doc-injection
+skillfence run ../SkillFence-Lab/AST05/external-doc-injection
 ```
 
 That's the deterministic, scripted path — correct for benchmarking, but
@@ -87,7 +87,7 @@ agent (Claude Desktop, Cline, the MCP Inspector) to a lab and watch it
 decide on its own what to do, still fully sandboxed:
 
 ```bash
-skillfence lab live ../DVAS/AST05/external-doc-injection
+skillfence lab live ../SkillFence-Lab/AST05/external-doc-injection
 ```
 
 See [`docs/live-mode.md`](docs/live-mode.md) for exact client connection
@@ -138,9 +138,9 @@ export PATH="$HOME/.local/bin:$PATH"   # if pip warns the scripts aren't on PATH
 
 ```bash
 docker compose build
-# mount a lab suite (e.g. a DVAS clone) at ./DVAS to run it inside the container:
-docker compose run --rm skillfence run DVAS/AST05/external-doc-injection --decision reject
-docker compose run --rm skillfence bench DVAS
+# mount a lab suite (e.g. a SkillFence-Lab clone) at ./SkillFence-Lab to run it inside the container:
+docker compose run --rm skillfence run SkillFence-Lab/AST05/external-doc-injection --decision reject
+docker compose run --rm skillfence bench SkillFence-Lab
 ```
 
 The container runs with `network_mode: none` — defense-in-depth on top of
@@ -186,23 +186,23 @@ flowchart LR
 
 ## Full command reference
 
-Every command below assumes a lab suite (like a cloned DVAS) is available
-at `../DVAS` relative to wherever you run `skillfence` — adjust the path to
+Every command below assumes a lab suite (like a cloned SkillFence-Lab) is available
+at `../SkillFence-Lab` relative to wherever you run `skillfence` — adjust the path to
 wherever you actually cloned it, or use `skillfence inspect`/`run` on your
 own skill directory instead.
 
 ### Discover labs
 
 ```bash
-skillfence lab list ../DVAS            # every lab: AST category, skill name, malicious/benign, purpose
-skillfence lab list ../DVAS/AST01      # scope the listing to one AST category
+skillfence lab list ../SkillFence-Lab            # every lab: AST category, skill name, malicious/benign, purpose
+skillfence lab list ../SkillFence-Lab/AST01      # scope the listing to one AST category
 ```
 
 ### Check a skill statically — no execution
 
 ```bash
-skillfence inspect ../DVAS/AST03/unauthorized-network   # read the declared manifest + SKILL.md only
-skillfence inspect path/to/your-skill                   # works on any skill/manifest.yaml, not just DVAS
+skillfence inspect ../SkillFence-Lab/AST03/unauthorized-network   # read the declared manifest + SKILL.md only
+skillfence inspect path/to/your-skill                   # works on any skill/manifest.yaml, not just SkillFence-Lab
 ```
 Static-only: reads `skill/manifest.yaml` and `skill/SKILL.md`, never touches
 the sandbox or runs anything.
@@ -210,12 +210,12 @@ the sandbox or runs anything.
 ### Run a lab or your own skill (the main command)
 
 ```bash
-skillfence run ../DVAS/AST05/external-doc-injection                    # live — you get an interactive decision prompt
-skillfence run ../DVAS/AST01/credential-reader --decision reject        # non-interactive (CI, scripting)
-skillfence run ast04                                                    # AST shorthand, if only one lab matches under ./DVAS
-skillfence run ../DVAS/AST01/credential-reader --mode observe           # log everything, block nothing
-skillfence run ../DVAS/AST01/credential-reader --decision allow_scoped  # approve + remember this exact action
-skillfence run ../DVAS/AST01/credential-reader --fresh                  # ignore any remembered org-wide approvals
+skillfence run ../SkillFence-Lab/AST05/external-doc-injection                    # live — you get an interactive decision prompt
+skillfence run ../SkillFence-Lab/AST01/credential-reader --decision reject        # non-interactive (CI, scripting)
+skillfence run ast04                                                    # AST shorthand, if only one lab matches under ./SkillFence-Lab
+skillfence run ../SkillFence-Lab/AST01/credential-reader --mode observe           # log everything, block nothing
+skillfence run ../SkillFence-Lab/AST01/credential-reader --decision allow_scoped  # approve + remember this exact action
+skillfence run ../SkillFence-Lab/AST01/credential-reader --fresh                  # ignore any remembered org-wide approvals
 skillfence run path/to/your-skill --decision reject                     # your own skill, sandboxed
 ```
 
@@ -241,27 +241,27 @@ wrong (`skillfence/fingerprint/behavior.py`).
 ### Shortcuts around `run`
 
 ```bash
-skillfence observe ../DVAS/AST05/external-doc-injection   # baseline: log everything, block nothing (alias for run --mode observe --decision approve_once)
-skillfence protect ../DVAS/AST01/credential-reader         # enforce: alias for run --mode enforce
-skillfence protect ../DVAS/AST01/credential-reader --decision reject
+skillfence observe ../SkillFence-Lab/AST05/external-doc-injection   # baseline: log everything, block nothing (alias for run --mode observe --decision approve_once)
+skillfence protect ../SkillFence-Lab/AST01/credential-reader         # enforce: alias for run --mode enforce
+skillfence protect ../SkillFence-Lab/AST01/credential-reader --decision reject
 ```
 
 ### See the evidence
 
 ```bash
-skillfence findings ../DVAS/AST05/external-doc-injection    # explainable findings recorded for a lab (title, AST, CDS, why-flagged, attack chain, decision)
-skillfence report ../DVAS/AST05/external-doc-injection       # full rollup: skill / risk / AST / findings / decision
-skillfence report ../DVAS/AST05/external-doc-injection --json
-skillfence report ../DVAS/AST05/external-doc-injection --markdown
-skillfence report ../DVAS/AST05/external-doc-injection --sarif > results.sarif   # for github/codeql-action/upload-sarif
-skillfence replay ../DVAS/AST05/external-doc-injection/.runs/<session>.events.jsonl   # replay a recorded session's event timeline
-skillfence profile ../DVAS/AST01/credential-reader            # one consolidated declared/observed/drift/history view — see below
+skillfence findings ../SkillFence-Lab/AST05/external-doc-injection    # explainable findings recorded for a lab (title, AST, CDS, why-flagged, attack chain, decision)
+skillfence report ../SkillFence-Lab/AST05/external-doc-injection       # full rollup: skill / risk / AST / findings / decision
+skillfence report ../SkillFence-Lab/AST05/external-doc-injection --json
+skillfence report ../SkillFence-Lab/AST05/external-doc-injection --markdown
+skillfence report ../SkillFence-Lab/AST05/external-doc-injection --sarif > results.sarif   # for github/codeql-action/upload-sarif
+skillfence replay ../SkillFence-Lab/AST05/external-doc-injection/.runs/<session>.events.jsonl   # replay a recorded session's event timeline
+skillfence profile ../SkillFence-Lab/AST01/credential-reader            # one consolidated declared/observed/drift/history view — see below
 ```
 
 ### Web dashboard
 
 ```bash
-skillfence dashboard ../DVAS/AST01/credential-reader   # one lab
+skillfence dashboard ../SkillFence-Lab/AST01/credential-reader   # one lab
 skillfence dashboard .skillfence/mcp                   # an MCP proxy audit dir
 skillfence dashboard . --port 9000 --no-browser
 ```
@@ -284,8 +284,8 @@ Bound to `127.0.0.1` only — never reachable from another machine.
 ### Lab Explorer — live web UI
 
 ```bash
-skillfence lab ui DVAS                    # browse every discovered lab, run one from the browser
-skillfence lab ui DVAS --port 9000
+skillfence lab ui SkillFence-Lab                    # browse every discovered lab, run one from the browser
+skillfence lab ui SkillFence-Lab --port 9000
 ```
 The dashboard above is read-only, past sessions only. This is the other
 direction: a live browser view over the labs themselves — declared
@@ -302,8 +302,8 @@ as the dashboard.
 
 ```bash
 skillfence audit keygen                              # once — generates a local Ed25519 keypair
-skillfence audit sign ../DVAS/AST01/credential-reader/.runs/findings.jsonl
-skillfence audit verify ../DVAS/AST01/credential-reader/.runs/findings.jsonl   # only needs the *public* key
+skillfence audit sign ../SkillFence-Lab/AST01/credential-reader/.runs/findings.jsonl
+skillfence audit verify ../SkillFence-Lab/AST01/credential-reader/.runs/findings.jsonl   # only needs the *public* key
 ```
 Signs any evidence file's current bytes with your private key, writing a
 `<file>.sig.json` sidecar. Hand a reviewer your public key and the evidence
@@ -313,8 +313,8 @@ either side ever needing to trust the other's word for it.
 ### Benchmark everything
 
 ```bash
-skillfence bench ../DVAS        # run every lab with an auto-reject decision, score vs ground-truth.yaml
-skillfence bench ../DVAS/AST01  # scope to one AST category
+skillfence bench ../SkillFence-Lab        # run every lab with an auto-reject decision, score vs ground-truth.yaml
+skillfence bench ../SkillFence-Lab/AST01  # scope to one AST category
 ```
 Reports detection rate on malicious labs, false-positive rate on benign
 labs, and human interruptions per run.
@@ -322,7 +322,7 @@ labs, and human interruptions per run.
 ### Guided walkthrough
 
 ```bash
-skillfence learn ../DVAS   # menu-driven: pick a malicious lab, read its mission, watch/drive it get caught live
+skillfence learn ../SkillFence-Lab   # menu-driven: pick a malicious lab, read its mission, watch/drive it get caught live
 ```
 
 ### Policy — org-wide remembered approvals (Decision Memory)
@@ -342,8 +342,8 @@ known false positive for the whole org ahead of time.
 ### Governance inventory (AST09 — No Governance)
 
 ```bash
-skillfence inventory ../DVAS              # only skills with a governance gap
-skillfence inventory ../DVAS --all        # every skill, including clean ones
+skillfence inventory ../SkillFence-Lab              # only skills with a governance gap
+skillfence inventory ../SkillFence-Lab --all        # every skill, including clean ones
 ```
 Every other command above is about one skill's runtime behavior. This one
 is about the fleet: which skills under a root directory have a
@@ -378,7 +378,7 @@ auditctl -a always,exit -F arch=b64 -S open,openat -k skillfence
 auditctl -a always,exit -F arch=b64 -S connect -k skillfence
 
 # after a session, correlate its event log against that window's audit trail
-skillfence telemetry correlate DVAS/AST01/credential-reader/.runs/<session>.events.jsonl /var/log/audit/audit.log --pid 4821
+skillfence telemetry correlate SkillFence-Lab/AST01/credential-reader/.runs/<session>.events.jsonl /var/log/audit/audit.log --pid 4821
 # or stream it directly:
 ausearch -k skillfence --format raw | skillfence telemetry correlate <session>.events.jsonl -
 ```
@@ -501,7 +501,7 @@ This reads the declared capabilities and the first lines of `skill/SKILL.md`
 way to answer "what is this skill even claiming to do."
 
 **Tier 2 — simulate what it does, fully sandboxed.** Add a `script.yaml`
-describing the actions to check (the same format every DVAS lab uses —
+describing the actions to check (the same format every SkillFence-Lab lab uses —
 `read`, `write`, `exec`, `fetch`, `network_send`, `update`, `read_secret`)
 and a `sandbox/` with whatever local fixture files those actions touch:
 
@@ -850,14 +850,14 @@ skill.invoke -> external_content.fetch -> external_content.instruction_detected
 
 ## Benchmark
 
-Requires the [DVAS](https://github.com/shaikarifali/DVAS) lab suite cloned
-alongside this repo (see **SkillFence + DVAS** above):
+Requires the [SkillFence-Lab](https://github.com/shaikarifali/SkillFence-Lab) lab suite cloned
+alongside this repo (see **SkillFence + SkillFence-Lab** above):
 
 ```bash
-skillfence bench ../DVAS
+skillfence bench ../SkillFence-Lab
 ```
 
-Current numbers on DVAS's single-shot labs across all ten OWASP
+Current numbers on SkillFence-Lab's single-shot labs across all ten OWASP
 categories plus the capstone (28 malicious, 3 benign) — the AST07
 labs and `AST01/delayed-payload` are multi-run and covered by their
 own dedicated tests instead (see `tests/`):
@@ -869,12 +869,12 @@ Human interruptions across benchmark: 28 (0 expected on benign, 28 on malicious)
 ```
 
 Also runnable as a regression suite: `python3 -m pytest tests/` (these
-tests skip automatically if a DVAS clone isn't found — see
+tests skip automatically if a SkillFence-Lab clone isn't found — see
 `tests/test_labs.py` for how to point them at one).
 
 ### Adversarial/evasion benchmark corpus
 
-A second, larger benchmark ships inside this repo (not DVAS) — generated,
+A second, larger benchmark ships inside this repo (not SkillFence-Lab) — generated,
 not committed, so there's nothing to keep in sync:
 
 ```bash
@@ -882,7 +882,7 @@ python3 scripts/build_adversarial_corpus.py
 skillfence bench benchmarks/adversarial
 ```
 
-DVAS's 15/2 proves the basic AST01–05 detectors work. This corpus
+SkillFence-Lab's 15/2 proves the basic AST01–05 detectors work. This corpus
 specifically stress-tests the *evasion-resistance* of the detectors built
 after that — 12 malicious labs (ASCII smuggling / Unicode Tag block
 encoding, zero-width character interleaving, live secrets pasted into
@@ -922,7 +922,7 @@ Full worked example, including the `permissions:` block `upload-sarif`
 needs: [`examples/github-action/consumer-workflow-example.yml`](examples/github-action/consumer-workflow-example.yml).
 
 This repo's own CI (`.github/workflows/tests.yml`) runs the full test
-suite plus `skillfence bench` against a fresh DVAS clone on every push —
+suite plus `skillfence bench` against a fresh SkillFence-Lab clone on every push —
 the 28/28 · 0/3 numbers above are enforced, not just claimed.
 
 ## Limitations

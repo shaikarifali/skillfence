@@ -1,20 +1,20 @@
-"""Regression suite driven by every DVAS lab's ground-truth.yaml.
+"""Regression suite driven by every SkillFence-Lab lab's ground-truth.yaml.
 
-DVAS (the vulnerable lab suite this runtime is benchmarked against) lives
-in its own repository: https://github.com/shaikarifali/DVAS. Clone it as a
-sibling of this repo (so you have `skillfence/` and `DVAS/` side by side),
-or point `DVAS_ROOT` at wherever you cloned it:
+SkillFence-Lab (the vulnerable lab suite this runtime is benchmarked against) lives
+in its own repository: https://github.com/shaikarifali/SkillFence-Lab. Clone it as a
+sibling of this repo (so you have `skillfence/` and `SkillFence-Lab/` side by side),
+or point `SKILLFENCE_LAB_ROOT` at wherever you cloned it:
 
-    git clone https://github.com/shaikarifali/DVAS ../DVAS
+    git clone https://github.com/shaikarifali/SkillFence-Lab ../SkillFence-Lab
     pytest tests/test_labs.py
-    # or: DVAS_ROOT=/path/to/DVAS pytest tests/test_labs.py
+    # or: SKILLFENCE_LAB_ROOT=/path/to/SkillFence-Lab pytest tests/test_labs.py
 
-If DVAS isn't found, these tests are skipped rather than failing — they
+If SkillFence-Lab isn't found, these tests are skipped rather than failing — they
 exercise the tool against an external, versioned corpus, not code that
 lives in this repo.
 
 No live network calls (all labs run fully offline against local fixtures),
-so this is safe to run in CI once DVAS is checked out alongside it.
+so this is safe to run in CI once SkillFence-Lab is checked out alongside it.
 """
 
 from __future__ import annotations
@@ -27,27 +27,27 @@ import yaml
 
 from skillfence.lab_runner import run_lab
 
-DVAS_ROOT = Path(os.environ.get("DVAS_ROOT", str(Path(__file__).resolve().parents[1].parent / "DVAS")))
+SKILLFENCE_LAB_ROOT = Path(os.environ.get("SKILLFENCE_LAB_ROOT", str(Path(__file__).resolve().parents[1].parent / "SkillFence-Lab")))
 
 SEVERITY_ORDER = {"low": 0, "medium": 1, "high": 2, "critical": 3}
 
 
 def _discover_labs() -> list[Path]:
-    if not DVAS_ROOT.is_dir():
+    if not SKILLFENCE_LAB_ROOT.is_dir():
         return []
-    return sorted(p.parent for p in DVAS_ROOT.glob("**/ground-truth.yaml"))
+    return sorted(p.parent for p in SKILLFENCE_LAB_ROOT.glob("**/ground-truth.yaml"))
 
 
 _LABS = _discover_labs()
 
 pytestmark = pytest.mark.skipif(
     not _LABS,
-    reason=f"DVAS lab suite not found at {DVAS_ROOT} — clone https://github.com/shaikarifali/DVAS "
-    "alongside this repo, or set DVAS_ROOT, to run these tests.",
+    reason=f"SkillFence-Lab lab suite not found at {SKILLFENCE_LAB_ROOT} — clone https://github.com/shaikarifali/SkillFence-Lab "
+    "alongside this repo, or set SKILLFENCE_LAB_ROOT, to run these tests.",
 )
 
 
-@pytest.mark.parametrize("lab_dir", _LABS or [Path(".")], ids=lambda p: p.relative_to(DVAS_ROOT).as_posix() if _LABS else "skipped")
+@pytest.mark.parametrize("lab_dir", _LABS or [Path(".")], ids=lambda p: p.relative_to(SKILLFENCE_LAB_ROOT).as_posix() if _LABS else "skipped")
 def test_lab_matches_ground_truth(lab_dir: Path):
     gt = yaml.safe_load((lab_dir / "ground-truth.yaml").read_text(encoding="utf-8"))
     result = run_lab(lab_dir, decision="reject")

@@ -8,7 +8,7 @@
 # never your real filesystem or network, regardless of what path you write.
 #
 # Available actions: read, write, exec, fetch, network_send, update, read_secret
-# (see DVAS/AST01-AST05/*/script.yaml for a real example of each)
+# (see SkillFence-Lab/AST01-AST05/*/script.yaml for a real example of each)
 
 skill: changelog-summarizer
 stop_on_block: true
@@ -19,4 +19,4 @@ steps:
   # Try adding a second step for something NOT in the manifest above, e.g.:
   #   - action: read
   #     path: "~/.aws/credentials"
-  # ...and re-run `skillfence run examples/my-first-skill` to see DVAS catch it.
+  # ...and re-run `skillfence run examples/my-first-skill` to see SkillFence-Lab catch it.

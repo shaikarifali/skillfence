@@ -1,6 +1,6 @@
 # my-first-skill — starter template
 
-Copy this whole directory to check your own skill with DVAS:
+Copy this whole directory to check your own skill with SkillFence-Lab:
 
 ```bash
 cp -r examples/my-first-skill my-skill-name
@@ -25,5 +25,5 @@ skillfence run examples/my-first-skill        # simulate the one step in script.
 
 Then add a step to `script.yaml` that goes outside the declared manifest
 (there's a commented-out example in the file) and run it again — that's
-DVAS catching capability drift on a skill you wrote yourself, not a
+SkillFence-Lab catching capability drift on a skill you wrote yourself, not a
 pre-built lab.
